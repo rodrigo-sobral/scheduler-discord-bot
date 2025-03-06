@@ -15,7 +15,7 @@ httpcore==0.15.0
 httpx==0.23.0
 idna==3.7
 itsdangerous==2.1.2
-Jinja2==3.1.4
+Jinja2==3.1.6
 MarkupSafe==2.1.1
 mccabe==0.6.1
 multidict==6.0.2
