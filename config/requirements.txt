@@ -27,5 +27,5 @@ python-dotenv==0.20.0
 rfc3986==1.5.0
 sniffio==1.2.0
 typing_extensions==4.3.0
-Werkzeug==3.0.6
+Werkzeug==3.1.4
 yarl==1.7.2
