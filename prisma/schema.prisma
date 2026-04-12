@@ -1,0 +1,37 @@
+// Prisma schema for Scheduler Discord Bot
+// Database provider and configuration
+// The connection URL is provided via the DATABASE_URL environment variable
+// (see .env and src/db.py)
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Prisma Client Python generator
+generator client {
+  provider = "prisma-client-py"
+}
+
+// Model for scheduled messages
+// Each user has their own queue of scheduled messages
+model ScheduledMessage {
+  id              String   @id @default(cuid())
+  user_id         String   // Discord user ID who created the message
+  message_content String   // The content of the message to be sent
+  destinations    String   // JSON-serialized array of destination IDs/names
+  delivery_day    Int?     // Day of month (optional, null means today)
+  delivery_month  Int?     // Month (optional, null means current month)
+  delivery_year   Int?     // Year (optional, null means current year)
+  delivery_hour   Int      // Hour (0-23) - mandatory
+  delivery_minute Int      // Minute (0-59) - mandatory
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  delivered_at    DateTime? // Timestamp when message was successfully delivered
+  failed          Boolean  @default(false) // Whether delivery failed
+  failure_reason  String?  // Reason for delivery failure if applicable
+  
+  @@index([user_id])
+  @@index([delivered_at])
+  @@index([failed])
+  @@index([delivery_year, delivery_month, delivery_day, delivery_hour, delivery_minute])
+}

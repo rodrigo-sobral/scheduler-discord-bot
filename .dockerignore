@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+.prisma/
+
+# Documentation
+assets/docs/
+
+# README and license
+README.md
+LICENSE
+
+# Scripts
+scripts/
+
+# Environment files (won't copy .env, .env.*)
+.env
+.env.*
+!.env.example
+
+# Tests
+tests/
+pytest.ini
+.pytest_cache/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/

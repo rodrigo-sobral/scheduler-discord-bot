@@ -1,3 +1,7 @@
-from commands.commands import MainCommands
+"""
+Discord Bot Commands Module
+"""
 
-MainCommands = MainCommands
+from .scheduler import SchedulerCommands
+
+__all__ = ["SchedulerCommands"]
