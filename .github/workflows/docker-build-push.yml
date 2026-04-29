@@ -103,4 +103,4 @@ jobs:
     steps:
       - name: Image build status
         run: |
-          echo "Docker image build completed with status: ${{ env.RESULT }}"
+          echo "Docker image build completed with status: ${RESULT}"
