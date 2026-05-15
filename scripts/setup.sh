@@ -1,5 +1,5 @@
 #!/bin/bash
-# Setup script for Scheduler Bot
+# Setup script for Scheduler Bot using uv
 # This script sets up the development environment
 
 set -e
@@ -14,20 +14,16 @@ echo "Checking Python version..."
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "Found Python $python_version"
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "venv" ]; then
-    echo "Creating virtual environment..."
-    python3 -m venv venv
+# Check if uv is installed
+if ! command -v uv &> /dev/null; then
+    echo "📦 Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$PATH"
 fi
 
-# Activate virtual environment
-echo "Activating virtual environment..."
-source venv/bin/activate
-
-# Install dependencies
-echo "Installing dependencies..."
-pip install --upgrade pip setuptools wheel
-pip install -r config/requirements.txt --upgrade
+# Create and sync virtual environment with uv
+echo "Setting up virtual environment and dependencies..."
+uv sync --dev
 
 # Check if Prisma needs setup
 if [ ! -f "db/database.db" ]; then
@@ -39,7 +35,7 @@ if [ ! -f "db/database.db" ]; then
         echo "   npx prisma generate --schema=prisma/schema.prisma"
     else
         echo "Generating Prisma client..."
-        python -m prisma generate --schema=prisma/schema.prisma
+        uv run prisma generate --schema=prisma/schema.prisma
     fi
 fi
 
@@ -57,7 +53,5 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Edit .env and add your Discord Bot Token"
-echo "2. Run: python3 -m src"
-echo ""
-echo "For help, run: python3 -m src"
+echo "2. Run: uv run python -m src"
 echo ""

@@ -1,24 +1,20 @@
 #!/bin/bash
-# Run the Scheduler Bot with auto-restart on file changes
+# Run the Scheduler Bot with auto-restart on file changes using uv
 
-# Check if venv exists
-if [ ! -d "venv" ]; then
+# Check if .venv exists (uv creates this)
+if [ ! -d ".venv" ]; then
     echo "❌ Virtual environment not found."
     echo "Please run: bash scripts/setup.sh"
     exit 1
 fi
 
-# Activate virtual environment
-source venv/bin/activate
-
 # Fix SSL certificate verification on macOS
-# Set up certifi certificate bundle for Python SSL verification
 export SSL_CERT_FILE=$(python3 -m certifi)
 
 # Function to start the bot
 start_bot() {
     echo "🚀 Starting Scheduler Bot..."
-    python -m src &
+    uv run -m src &
     BOT_PID=$!
 }
 
@@ -33,15 +29,8 @@ stop_bot() {
 
 # Function to watch for file changes and restart
 watch_and_restart() {
-    # Check if watchdog is installed
-    python3 -c "import watchdog" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        echo "⚠️  watchdog not installed. Installing..."
-        pip install watchdog[watchmedo] > /dev/null 2>&1
-    fi
-    
-    # Watch src/ directory for changes
-    watchmedo auto-restart \
+    # Watch src/ directory for changes with uv
+    uv run watchmedo auto-restart \
         --directory=./src \
         --pattern="*.py" \
         --recursive \

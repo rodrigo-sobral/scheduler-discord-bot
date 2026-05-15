@@ -53,7 +53,7 @@ echo $CR_PAT | docker login ghcr.io -u YOUR_USERNAME --password-stdin
 Create or update `.env`:
 
 ```env
-DISCORD_TOKEN=your_bot_token_here
+BOT_TOKEN=your_bot_token_here
 TZ=Europe/London
 ```
 
@@ -65,7 +65,7 @@ TZ=Europe/London
 docker run -d \
   --name scheduler_bot \
   --restart unless-stopped \
-  -e DISCORD_TOKEN=${DISCORD_TOKEN} \
+  -e BOT_TOKEN=${BOT_TOKEN} \
   -e TZ=${TZ} \
   -v scheduler_data:/app/db \
   -v scheduler_logs:/app/logs \
@@ -88,7 +88,7 @@ services:
     container_name: scheduler_bot
     restart: unless-stopped
     environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      BOT_TOKEN: ${BOT_TOKEN}
       TZ: ${TZ}
     volumes:
       - scheduler_data:/app/db
@@ -130,7 +130,7 @@ metadata:
   name: scheduler-secret
 type: Opaque
 stringData:
-  DISCORD_TOKEN: "your_bot_token_here"
+  BOT_TOKEN: "your_bot_token_here"
 
 ---
 apiVersion: apps/v1
@@ -157,11 +157,11 @@ spec:
             configMapKeyRef:
               name: scheduler-config
               key: TZ
-        - name: DISCORD_TOKEN
+        - name: BOT_TOKEN
           valueFrom:
             secretKeyRef:
               name: scheduler-secret
-              key: DISCORD_TOKEN
+              key: BOT_TOKEN
         volumeMounts:
         - name: data
           mountPath: /app/db
@@ -238,7 +238,7 @@ docker rm scheduler_bot
 
 ### Bot won't start
 - Check logs: `docker logs scheduler_bot`
-- Verify `DISCORD_TOKEN` is set and valid
+- Verify `BOT_TOKEN` is set and valid
 - Confirm privileged intents are enabled in Discord Portal
 
 ### Database issues
@@ -253,7 +253,7 @@ docker rm scheduler_bot
 
 | Variable | Required | Notes |
 |----------|----------|-------|
-| DISCORD_TOKEN | Yes | Bot token from Discord Portal |
+| BOT_TOKEN | Yes | Bot token from Discord Portal |
 | TZ | No | Timezone (default: Europe/London) |
 
 ## Image Details

@@ -1,12 +1,11 @@
 # Development Guide
 
-Set up the bot for local development.
+Set up the bot for local development using `uv`.
 
 ## Prerequisites
 
-- Python 3.10 or higher
+- Python 3.12 or higher
 - Node.js (for Prisma)
-- pip and npm
 - Git
 
 ## Step 1: Clone and Setup
@@ -14,25 +13,23 @@ Set up the bot for local development.
 ```bash
 git clone <repo-url> && cd scheduler-discord-bot
 
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install Python dependencies
-pip install -r config/requirements.txt
-
-# Generate Prisma client
-cd db
-npx prisma generate
-cd ..
+# Run setup script (installs uv if needed, creates .venv, syncs dependencies)
+bash scripts/setup.sh
 ```
+
+The setup script will:
+- Install `uv` if not already installed
+- Create a Python virtual environment (`.venv`)
+- Install all project dependencies
+- Set up Prisma client
+- Create `.env` file from `.env.example`
 
 ## Step 2: Create Discord Bot
 
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Click **New Application** and give it a name
 3. Go to **Bot** section → Click **Add Bot**
-4. Under **TOKEN**, click **Copy** (this is your `DISCORD_TOKEN`)
+4. Under **TOKEN**, click **Copy** (this is your `BOT_TOKEN`)
 5. Go to **OAuth2** → **URL Generator**
 6. Select scopes: `bot`
 7. Select permissions:
@@ -44,14 +41,10 @@ cd ..
 
 ## Step 3: Configure Environment Variables
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set:
+Edit `.env`:
 
 ```env
-DISCORD_TOKEN=your_bot_token_here
+BOT_TOKEN=your_bot_token_here
 TZ=Europe/London
 ```
 
@@ -74,7 +67,7 @@ In Discord Developer Portal:
 ## Step 5: Run the Bot
 
 ```bash
-python -m src
+uv run python -m src
 ```
 
 You should see:
@@ -101,19 +94,15 @@ With the bot running, test each command:
 To view or manage the database:
 
 ```bash
-cd db
-npx prisma studio
-cd ..
+uv run prisma studio
 ```
 
-This opens Prisma Studio at http://localhost:5555
+Opens Prisma Studio at http://localhost:5555
 
 To reset the database (⚠️ deletes all messages):
 
 ```bash
-cd db
-npx prisma migrate reset
-cd ..
+uv run prisma migrate reset
 ```
 
 ## Stopping the Bot
@@ -122,8 +111,20 @@ Press `Ctrl+C` in the terminal.
 
 ## Troubleshooting
 
+### "uv: command not found"
+Install uv:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### ".venv not found"
+Run setup again:
+```bash
+bash scripts/setup.sh
+```
+
 ### "Bot is not responding"
-- Verify `DISCORD_TOKEN` is correct in `.env`
+- Verify `BOT_TOKEN` is correct in `.env`
 - Check privileged intents are enabled in Discord Portal
 - Restart the bot
 - Check bot has permissions in your Discord server
@@ -135,28 +136,33 @@ Press `Ctrl+C` in the terminal.
 
 ### "Database is locked"
 - Restart the bot
-- If persists: `rm -rf db/database.db` and restart
+- If persists: `uv run prisma migrate reset`
 
-### "ModuleNotFoundError"
-- Activate virtual environment: `source venv/bin/activate`
-- Reinstall dependencies: `pip install -r config/requirements.txt`
+### Import errors after adding dependencies
+```bash
+uv sync
+```
 
-## Code Organization
+## Project Structure
 
 ```
-src/
-├── __main__.py          Entry point & Discord events
-├── commands/
-│   └── scheduler.py     Slash command implementations
-├── delivery.py          Message delivery service
-├── db.py                Database operations
-└── utils.py             Validation & parsing utilities
-
-db/
-└── schema.prisma        Database schema
-
-config/
-└── requirements.txt     Python dependencies
+.
+├── pyproject.toml              Project metadata and dependencies
+├── uv.lock                     Locked dependency versions
+├── src/
+│   ├── __main__.py             Entry point & Discord events
+│   ├── commands/
+│   │   └── scheduler.py        Slash command implementations
+│   ├── delivery.py             Message delivery service
+│   ├── db.py                   Database operations
+│   └── utils.py                Validation & parsing utilities
+├── prisma/
+│   └── schema.prisma           Database schema
+├── scripts/
+│   ├── setup.sh                One-time setup
+│   ├── run.sh                  Run with auto-restart
+│   └── check.sh                Format and lint
+└── Dockerfile                  Container build
 ```
 
 ## Making Changes
@@ -165,15 +171,14 @@ After making code changes:
 
 1. Stop the bot (`Ctrl+C`)
 2. Make your changes
-3. Restart the bot (`python -m src`)
+3. Run linting: `bash scripts/check.sh`
+4. Restart the bot: `uv run python -m src`
 
 If you modify the database schema:
 
 ```bash
-cd db
-npx prisma migrate dev --name describe_your_change
-cd ..
-python -m src
+uv run prisma migrate dev --name describe_your_change
+uv run python -m src
 ```
 
 ## Next Steps
