@@ -50,9 +50,9 @@ RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app
 USER scheduler
 
 # Ensure Python can find the app and uses the virtual environment
-ENV PATH=/app/.venv/bin:$PATH \
+ENV PYTHONPATH=/app:$PYTHONPATH \
+    PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app:$PYTHONPATH \
     VIRTUAL_ENV=/app/.venv
 
 # Health check - verify bot process is actually running
