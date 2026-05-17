@@ -1,6 +1,6 @@
 # Multi-stage build for Discord Scheduler Bot
 # Stage 1: Build stage
-FROM python:3.12-alpine AS builder
+FROM python:3.14-alpine AS builder
 
 WORKDIR /app
 
