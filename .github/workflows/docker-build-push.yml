@@ -44,7 +44,9 @@ jobs:
         run: uvx ruff check . --fix --exit-zero
 
       - name: Test code 🧪
-        run: uv run pytest
+        run: |
+          uv run prisma generate && \
+          uv run pytest
 
   build-and-push:
     runs-on: ubuntu-latest
