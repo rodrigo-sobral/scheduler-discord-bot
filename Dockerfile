@@ -41,7 +41,6 @@ COPY --from=builder --chown=scheduler:scheduler /app/.venv /app/.venv
 
 # Copy application code
 COPY --chown=scheduler:scheduler src /app/src
-COPY --chown=scheduler:scheduler config /app/config
 COPY --chown=scheduler:scheduler assets /app/assets
 
 # Setup logs directory
@@ -58,7 +57,7 @@ ENV PATH=/app/.venv/bin:$PATH \
 
 # Health check - verify bot process is actually running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD pgrep -f "python -m src.__main__" > /dev/null || exit 1    # FIX 4: check the process, not just imports
+    CMD pgrep -f "python -m src.__main__" > /dev/null || exit 1
 
 # Run the bot
 CMD ["python", "-m", "src.__main__"]
