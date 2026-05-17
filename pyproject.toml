@@ -22,19 +22,10 @@ dependencies = [
     "pydantic>=2.5.0",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "ruff>=0.5.0",
     "pytest>=7.4.0",
-    "watchdog[watchmedo]>=4.0.0",
-]
-
-[tool.uv]
-managed = true
-dev-dependencies = [
-    "ruff>=0.5.0",
-    "pytest>=7.4.0",
-    "watchdog[watchmedo]>=4.0.0",
 ]
 
 [tool.ruff]
@@ -43,7 +34,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "C4", "B", "A"]
-ignore = ["E501", "W503", "E203"]
+ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
