@@ -4,7 +4,6 @@ build-backend = "hatchling.build"
 
 [project]
 name = "scheduler-discord-bot"
-version = "0.0.2"
 description = "Discord bot that schedules messages to users and channels at specific times"
 readme = "README.md"
 license = "MIT"
@@ -64,3 +63,6 @@ python_files = ["test_*.py", "*_test.py"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.hatch]
+version = { path = "src/_version.py" }
