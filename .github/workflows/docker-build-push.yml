@@ -205,9 +205,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
             # Semver tag — only populated when version-bump ran and output a version
             type=raw,value=${{ needs.version-bump.outputs.new_version }},enable=${{ needs.version-bump.outputs.new_version != '' }}
 
