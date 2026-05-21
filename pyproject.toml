@@ -5,6 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "scheduler-discord-bot"
 description = "Discord bot that schedules messages to users and channels at specific times"
+dynamic = ["version"]
 readme = "README.md"
 license = "MIT"
 authors = [
