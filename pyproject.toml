@@ -24,6 +24,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "isort>=8.0.1",
     "ruff>=0.5.0",
     "pytest>=7.4.0",
 ]
