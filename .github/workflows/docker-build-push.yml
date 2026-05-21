@@ -116,11 +116,59 @@ jobs:
 
       - name: Push commit and tag 🚀
         env:
-          WORKFLOW_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          git remote set-url origin "https://x-access-token:${WORKFLOW_ACCESS_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git push origin "${REF_NAME}" --tags --atomic
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push origin "${REF_NAME}" --follow-tags --atomic
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: version-bump
+    if: github.event_name == 'workflow_dispatch' && needs.version-bump.outputs.new_version != ''
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: gen
+        env:
+          NEW_TAG: ${{ needs.version-bump.outputs.new_version }}
+        run: |
+          git fetch --tags
+          if [ -z "$NEW_TAG" ]; then
+            echo "No new version available" >&2
+            exit 1
+          fi
+          PREV_TAG=$(git tag --sort=-creatordate | grep -v "^$NEW_TAG$" | sed -n '1p' || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..HEAD"
+          else
+            RANGE="$NEW_TAG"
+          fi
+          COMMITS=$(git log $RANGE --pretty=format:'- %h %s (%an)')
+          if [ -z "$COMMITS" ]; then
+            COMMITS="No commits found."
+          fi
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ steps.gen.outputs.tag }}
+          name: ${{ steps.gen.outputs.tag }}
+          body: ${{ steps.gen.outputs.body }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-and-push:
     runs-on: ubuntu-latest
