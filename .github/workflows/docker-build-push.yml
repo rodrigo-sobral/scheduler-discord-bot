@@ -128,10 +128,10 @@ jobs:
     needs: version-bump
     if: github.event_name == 'workflow_dispatch' && needs.version-bump.outputs.new_version != ''
     permissions:
-      contents: write
+      contents: write # Required to create a release and upload assets (if any)
     steps:
       - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
           fetch-depth: 0
