@@ -20,6 +20,8 @@ dependencies = [
     "anyio>=3.7.1",
     "async-timeout>=4.0.1",
     "pydantic>=2.5.0",
+    "dateparser>=1.2.0",
+    "tzdata>=2024.1",
 ]
 
 [dependency-groups]
@@ -27,6 +29,7 @@ dev = [
     "isort>=8.0.1",
     "ruff>=0.5.0",
     "pytest>=7.4.0",
+    "watchdog>=6.0.0",
 ]
 
 [tool.ruff]

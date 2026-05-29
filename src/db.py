@@ -40,20 +40,17 @@ class DatabaseManager:
             # Ensure db directory exists
             db_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # If database doesn't exist, create it with Prisma
-            if not db_path.exists():
-                # Use Prisma CLI to create the database and apply schema
-                # This is a synchronous operation that must happen before async connect
-                result = subprocess.run(
-                    ["python", "-m", "prisma", "db", "push", "--skip-generate", "--schema", str(schema_path)],
+            # Always push schema to ensure new tables/columns are created
+            result = subprocess.run(
+                    ["python", "-m", "prisma", "db", "push", "--skip-generate", "--accept-data-loss", "--schema", str(schema_path)],
                     cwd=str(project_root),
                     capture_output=True,
                     text=True,
                     timeout=30,
                 )
 
-                if result.returncode != 0:
-                    raise RuntimeError(f"Prisma db push failed: {result.stderr}")
+            if result.returncode != 0:
+                raise RuntimeError(f"Prisma db push failed: {result.stderr}")
 
             self._initialized = True
         except subprocess.TimeoutExpired:
@@ -82,6 +79,7 @@ class DatabaseManager:
         year: Optional[int],
         hour: int,
         minute: int,
+        repeat_interval: Optional[str] = None,
     ) -> Dict:
         """
         Create a new scheduled message
@@ -106,6 +104,7 @@ class DatabaseManager:
                 "delivery_year": year,
                 "delivery_hour": hour,
                 "delivery_minute": minute,
+                "repeat_interval": repeat_interval,
                 "delivered_at": None,
                 "failed": False,
             }
@@ -283,9 +282,35 @@ class DatabaseManager:
             "delivery_year": message.delivery_year,
             "delivery_hour": message.delivery_hour,
             "delivery_minute": message.delivery_minute,
+            "repeat_interval": message.repeat_interval,
             "created_at": message.created_at,
             "updated_at": message.updated_at,
             "delivered_at": message.delivered_at,
             "failed": message.failed,
             "failure_reason": message.failure_reason,
         }
+
+    async def get_delivered_messages(self, user_id: str, limit: int = 10) -> List[Dict]:
+        """Get the most recently delivered messages for a user."""
+        messages = await self.client.scheduledmessage.find_many(
+            where={"user_id": str(user_id), "delivered_at": {"not": None}},
+            order={"delivered_at": "desc"},
+            take=limit,
+        )
+        return [self._format_message(m) for m in messages]
+
+    async def get_user_timezone(self, user_id: str) -> Optional[Dict]:
+        """Get the stored timezone for a user, or None if not set."""
+        record = await self.client.usertimezone.find_unique(where={"user_id": str(user_id)})
+        return {"user_id": record.user_id, "timezone": record.timezone} if record else None
+
+    async def set_user_timezone(self, user_id: str, timezone: str) -> Dict:
+        """Create or update the timezone for a user."""
+        record = await self.client.usertimezone.upsert(
+            where={"user_id": str(user_id)},
+            data={
+                "create": {"user_id": str(user_id), "timezone": timezone},
+                "update": {"timezone": timezone},
+            },
+        )
+        return {"user_id": record.user_id, "timezone": record.timezone}

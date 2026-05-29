@@ -166,13 +166,13 @@ class TestValidateDestination:
 
     def test_valid_at_mention_with_username(self):
         """Test @username format"""
-        assert validate_destination("@rodrigo") is True
+        assert validate_destination("@username1") is True
         assert validate_destination("@user-name") is True
         assert validate_destination("@user_name") is True
 
     def test_valid_plain_username(self):
         """Test plain username without @ prefix"""
-        assert validate_destination("rodrigo") is True
+        assert validate_destination("username1") is True
         assert validate_destination("user-name") is True
         assert validate_destination("user_name") is True
 
@@ -214,12 +214,12 @@ class TestExtractDiscordId:
 
     def test_extract_from_at_mention(self):
         """Test extraction from @username format"""
-        assert extract_discord_id("@rodrigo") == "rodrigo"
+        assert extract_discord_id("@username1") == "username1"
         assert extract_discord_id("@user-name") == "user-name"
 
     def test_extract_from_plain_username(self):
         """Test extraction from plain username"""
-        assert extract_discord_id("rodrigo") == "rodrigo"
+        assert extract_discord_id("username1") == "username1"
         assert extract_discord_id("user-name") == "user-name"
 
     def test_extract_from_channel_mention(self):
@@ -236,7 +236,7 @@ class TestExtractDiscordId:
 
     def test_extract_with_whitespace(self):
         """Test that whitespace is stripped"""
-        assert extract_discord_id("  @rodrigo  ") == "rodrigo"
+        assert extract_discord_id("  @username1  ") == "username1"
 
 
 class TestParseDestinations:
@@ -244,30 +244,30 @@ class TestParseDestinations:
 
     def test_single_destination(self):
         """Test parsing single destination"""
-        result = parse_destinations("@rodrigo")
-        assert result == ["rodrigo"]
+        result = parse_destinations("@username1")
+        assert result == ["username1"]
 
     def test_multiple_destinations_space_separated(self):
         """Test parsing space-separated destinations"""
-        result = parse_destinations("@rodrigo @alex @bot")
-        assert set(result) == {"rodrigo", "alex", "bot"}
+        result = parse_destinations("@username1 @username2 @bot")
+        assert set(result) == {"username1", "username2", "bot"}
 
     def test_multiple_destinations_comma_separated(self):
         """Test parsing comma-separated destinations"""
-        result = parse_destinations("@rodrigo, @alex, @bot")
-        assert set(result) == {"rodrigo", "alex", "bot"}
+        result = parse_destinations("@username1, @username2, @bot")
+        assert set(result) == {"username1", "username2", "bot"}
 
     def test_mixed_format_destinations(self):
         """Test parsing destinations with mixed formats"""
-        result = parse_destinations("@rodrigo 123456789012345678 <@987654321098765432>")
-        assert "rodrigo" in result
+        result = parse_destinations("@username1 123456789012345678 <@987654321098765432>")
+        assert "username1" in result
         assert "123456789012345678" in result
         assert "987654321098765432" in result
 
     def test_destinations_with_extra_whitespace(self):
         """Test that extra whitespace is handled"""
-        result = parse_destinations("  @rodrigo   @alex  ")
-        assert set(result) == {"rodrigo", "alex"}
+        result = parse_destinations("  @username1   @username2  ")
+        assert set(result) == {"username1", "username2"}
 
     def test_empty_destinations_raises_error(self):
         """Test that empty destination string raises error"""

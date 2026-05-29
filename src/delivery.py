@@ -7,6 +7,7 @@ import logging
 from typing import List, Dict, Optional
 import discord
 from discord.ext import commands
+from .utils import compute_next_recurrence
 
 logger = logging.getLogger(__name__)
 
@@ -14,14 +15,9 @@ logger = logging.getLogger(__name__)
 class MessageDeliveryService:
     """Service for delivering scheduled messages to Discord"""
 
-    def __init__(self, bot: commands.Bot):
-        """
-        Initialize delivery service
-
-        Args:
-            bot: Discord bot instance
-        """
+    def __init__(self, bot: commands.Bot, db=None):
         self.bot = bot
+        self.db = db
 
     async def deliver_message(self, message: Dict) -> tuple[bool, Optional[str]]:
         """
@@ -65,6 +61,10 @@ class MessageDeliveryService:
                 await self._send_confirmation_to_creator(
                     creator_id, content, successful_destinations, failed_destinations, message_id
                 )
+
+            # Reschedule recurring messages on at least partial success
+            if successful_destinations and message.get("repeat_interval") and self.db:
+                await self._reschedule_recurring(message)
 
             # Determine overall success
             if len(successful_destinations) == 0:
@@ -243,3 +243,22 @@ class MessageDeliveryService:
 
         except Exception as e:
             logger.warning(f"Could not send confirmation to creator {creator_id}: {e}")
+
+    async def _reschedule_recurring(self, message: Dict) -> None:
+        """Create the next occurrence of a recurring message."""
+        next_time = compute_next_recurrence(message)
+        if next_time is None:
+            return
+        h, m, d, mo, y = next_time
+        try:
+            await self.db.create_message(
+                user_id=message["user_id"],
+                content=message["message_content"],
+                destinations=message["destinations"],
+                day=d, month=mo, year=y,
+                hour=h, minute=m,
+                repeat_interval=message["repeat_interval"],
+            )
+            logger.info(f"Recurring message {message['id']} rescheduled for {y:04d}-{mo:02d}-{d:02d} {h:02d}:{m:02d}")
+        except Exception as e:
+            logger.error(f"Failed to reschedule message {message['id']}: {e}")

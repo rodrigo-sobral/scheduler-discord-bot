@@ -24,6 +24,7 @@ model ScheduledMessage {
   delivery_year   Int?     // Year (optional, null means current year)
   delivery_hour   Int      // Hour (0-23) - mandatory
   delivery_minute Int      // Minute (0-59) - mandatory
+  repeat_interval String?  // null = one-time | "daily" | "weekly" | "monthly"
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
   delivered_at    DateTime? // Timestamp when message was successfully delivered
@@ -34,4 +35,12 @@ model ScheduledMessage {
   @@index([delivered_at])
   @@index([failed])
   @@index([delivery_year, delivery_month, delivery_day, delivery_hour, delivery_minute])
+}
+
+// Per-user timezone preference
+model UserTimezone {
+  user_id    String   @id
+  timezone   String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }

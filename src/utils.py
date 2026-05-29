@@ -3,10 +3,15 @@ Utility functions for the Scheduler Bot
 Includes validation, parsing, and queue management
 """
 
+import calendar
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 import re
+
+import dateparser
+import discord
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 class ValidationError(Exception):
@@ -232,7 +237,7 @@ def deserialize_destinations(destinations_json: str) -> List[str]:
         return []
 
 
-def format_delivery_time(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int) -> str:
+def format_delivery_time(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int, user_tz: Optional[str] = None) -> str:
     """
     Format delivery time for display
 
@@ -255,6 +260,14 @@ def format_delivery_time(day: Optional[int], month: Optional[int], year: Optiona
 
     try:
         dt = datetime(year, month, day, hour, minute)
+        if user_tz and user_tz != "UTC":
+            try:
+                from zoneinfo import ZoneInfo
+                utc_dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+                local_dt = utc_dt.astimezone(ZoneInfo(user_tz))
+                return local_dt.strftime("%Y-%m-%d %H:%M") + f" ({user_tz})"
+            except Exception:
+                pass
         return dt.strftime("%Y-%m-%d %H:%M")
     except ValueError:
         return f"{year:04d}-{month:02d}-{day:02d} {hour:02d}:{minute:02d}"
@@ -363,3 +376,140 @@ def is_delivery_time(message: Dict) -> bool:
         and now.hour == delivery_dt.hour
         and now.minute == delivery_dt.minute
     )
+
+
+def validate_timezone(tz_name: str) -> None:
+    """Raise ValidationError if tz_name is not a valid IANA timezone."""
+    try:
+        ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, KeyError):
+        raise ValidationError(
+            f"Unknown timezone: `{tz_name}`. Use an IANA name such as `Europe/Lisbon`, `America/New_York`, or `UTC`."
+        )
+
+
+def parse_time_expression(expr: str, user_tz: str = "UTC") -> Tuple[int, int, Optional[int], Optional[int], Optional[int]]:
+    """
+    Parse a time expression (natural language or structured) and return
+    (hour, minute, day, month, year) adjusted to server-local time.
+
+    Accepts: "15:30", "25/12 09:00", "tomorrow at 3pm", "next Friday", "in 2 hours"
+    """
+    expr = expr.strip()
+    if not expr:
+        raise ValidationError("Time expression cannot be empty.")
+
+    try:
+        tz = ZoneInfo(user_tz)
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = ZoneInfo("UTC")
+        user_tz = "UTC"
+
+    now_in_tz = datetime.now(tz)
+
+    parsed = dateparser.parse(
+        expr,
+        settings={
+            "TIMEZONE": user_tz,
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "PREFER_DATES_FROM": "future",
+            "DATE_ORDER": "DMY",
+            "RELATIVE_BASE": now_in_tz,
+        },
+    )
+
+    if parsed is not None:
+        # Convert to server-local naive datetime (delivery loop uses datetime.now())
+        server_local = parsed.astimezone().replace(tzinfo=None)
+        return server_local.hour, server_local.minute, server_local.day, server_local.month, server_local.year
+
+    # Fallback: "DD/MM HH:MM" or "DD/MM/YYYY HH:MM"
+    parts = expr.split()
+    if len(parts) == 2:
+        try:
+            day, month, year = parse_date_input(parts[0])
+            hour, minute = parse_time_input(parts[1])
+            now = datetime.now()
+            return hour, minute, day, month or now.month, year or now.year
+        except ValidationError:
+            pass
+
+    # Fallback: bare "HH:MM"
+    try:
+        hour, minute = parse_time_input(expr)
+        now = datetime.now()
+        return hour, minute, now.day, now.month, now.year
+    except ValidationError:
+        pass
+
+    raise ValidationError(
+        f"Could not parse `{expr}`. Try: `15:30`, `25/12 09:00`, `tomorrow at 3pm`, `next Friday 15:30`, `in 2 hours`."
+    )
+
+
+def get_relative_time_str(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int) -> str:
+    """Return a short relative-time label: 'overdue', 'in 4h 20m', 'in 2d', etc."""
+    delivery_dt = build_delivery_datetime(day, month, year, hour, minute)
+    delta = delivery_dt - datetime.now()
+    total_secs = delta.total_seconds()
+
+    if total_secs < 0:
+        return "overdue"
+
+    total_mins = int(total_secs / 60)
+    if total_mins < 60:
+        return f"in {total_mins}m"
+    hours = total_mins // 60
+    mins = total_mins % 60
+    if hours < 24:
+        return f"in {hours}h {mins}m" if mins else f"in {hours}h"
+    days = hours // 24
+    hrs = hours % 24
+    if days < 7:
+        return f"in {days}d {hrs}h" if hrs else f"in {days}d"
+    return f"in {days // 7}w"
+
+
+def get_urgency_color(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int) -> discord.Color:
+    """Red for <1h or overdue, orange for <24h, green otherwise."""
+    delivery_dt = build_delivery_datetime(day, month, year, hour, minute)
+    secs = (delivery_dt - datetime.now()).total_seconds()
+    if secs < 3600:
+        return discord.Color.red()
+    if secs < 86400:
+        return discord.Color.orange()
+    return discord.Color.green()
+
+
+def compute_next_recurrence(message: Dict) -> Optional[Tuple[int, int, Optional[int], Optional[int], Optional[int]]]:
+    """
+    Given a recurring message, return (hour, minute, day, month, year) for its
+    next delivery, or None if the message is not recurring.
+    """
+    interval = message.get("repeat_interval")
+    if not interval:
+        return None
+
+    current = build_delivery_datetime(
+        message.get("delivery_day"),
+        message.get("delivery_month"),
+        message.get("delivery_year"),
+        message["delivery_hour"],
+        message["delivery_minute"],
+    )
+
+    if interval == "daily":
+        nxt = current + timedelta(days=1)
+    elif interval == "weekly":
+        nxt = current + timedelta(weeks=1)
+    elif interval == "monthly":
+        m = current.month + 1
+        y = current.year
+        if m > 12:
+            m, y = 1, y + 1
+        max_day = calendar.monthrange(y, m)[1]
+        nxt = current.replace(year=y, month=m, day=min(current.day, max_day))
+    else:
+        return None
+
+    return nxt.hour, nxt.minute, nxt.day, nxt.month, nxt.year

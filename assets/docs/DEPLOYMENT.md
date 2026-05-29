@@ -207,7 +207,7 @@ docker ps | grep scheduler_bot
 # View logs
 docker logs scheduler_bot
 
-# Should see: "✅ Synced 5 slash command(s) with Discord"
+# Should see: "✅ Synced 7 slash command(s) with Discord"
 ```
 
 ## Step 7: Update When New Code Is Pushed
@@ -254,7 +254,7 @@ docker rm scheduler_bot
 | Variable | Required | Notes |
 |----------|----------|-------|
 | BOT_TOKEN | Yes | Bot token from Discord Portal |
-| TZ | No | Timezone (default: Europe/London) |
+| TZ | No | Server process timezone — sets the clock used by the delivery loop. Each Discord user can also set their own display/input timezone with `/tz set` (stored in the database), independently of this value. Recommended: `UTC`. |
 
 ## Image Details
 
