@@ -80,6 +80,7 @@ class DatabaseManager:
         hour: int,
         minute: int,
         repeat_interval: Optional[str] = None,
+        embed_data: Optional[str] = None,
     ) -> Dict:
         """
         Create a new scheduled message
@@ -105,6 +106,7 @@ class DatabaseManager:
                 "delivery_hour": hour,
                 "delivery_minute": minute,
                 "repeat_interval": repeat_interval,
+                "embed_data": embed_data,
                 "delivered_at": None,
                 "failed": False,
             }
@@ -168,7 +170,7 @@ class DatabaseManager:
         Returns:
             List of undelivered messages
         """
-        messages = await self.client.scheduledmessage.find_many(where={"delivered_at": None, "failed": False})
+        messages = await self.client.scheduledmessage.find_many(where={"delivered_at": None, "failed": False, "paused": False})
 
         formatted = [self._format_message(m) for m in messages]
 
@@ -218,6 +220,8 @@ class DatabaseManager:
             update_data["delivery_hour"] = kwargs["delivery_hour"]
         if "delivery_minute" in kwargs:
             update_data["delivery_minute"] = kwargs["delivery_minute"]
+        if "embed_data" in kwargs:
+            update_data["embed_data"] = kwargs["embed_data"]
 
         if not update_data:
             return message
@@ -283,6 +287,8 @@ class DatabaseManager:
             "delivery_hour": message.delivery_hour,
             "delivery_minute": message.delivery_minute,
             "repeat_interval": message.repeat_interval,
+            "paused": message.paused,
+            "embed_data": message.embed_data,
             "created_at": message.created_at,
             "updated_at": message.updated_at,
             "delivered_at": message.delivered_at,
@@ -314,3 +320,77 @@ class DatabaseManager:
             },
         )
         return {"user_id": record.user_id, "timezone": record.timezone}
+
+    async def pause_message(self, message_id: str, user_id: str) -> Optional[Dict]:
+        """Pause a pending message so it is skipped by the delivery loop."""
+        if not await self.get_message(message_id, user_id):
+            return None
+        updated = await self.client.scheduledmessage.update(
+            where={"id": message_id}, data={"paused": True}
+        )
+        return self._format_message(updated)
+
+    async def resume_message(self, message_id: str, user_id: str) -> Optional[Dict]:
+        """Resume a paused message."""
+        if not await self.get_message(message_id, user_id):
+            return None
+        updated = await self.client.scheduledmessage.update(
+            where={"id": message_id}, data={"paused": False}
+        )
+        return self._format_message(updated)
+
+    async def save_template(self, user_id: str, name: str, content: str, destinations: List[str], embed_data: Optional[str] = None) -> Dict:
+        """Create or overwrite a named message template."""
+        record = await self.client.messagetemplate.upsert(
+            where={"user_id_name": {"user_id": str(user_id), "name": name}},
+            data={
+                "create": {
+                    "user_id": str(user_id),
+                    "name": name,
+                    "message_content": content,
+                    "destinations": serialize_destinations(destinations),
+                    "embed_data": embed_data,
+                },
+                "update": {
+                    "message_content": content,
+                    "destinations": serialize_destinations(destinations),
+                    "embed_data": embed_data,
+                },
+            },
+        )
+        return self._format_template(record)
+
+    async def get_template(self, user_id: str, name: str) -> Optional[Dict]:
+        """Fetch a template by name."""
+        record = await self.client.messagetemplate.find_unique(
+            where={"user_id_name": {"user_id": str(user_id), "name": name}}
+        )
+        return self._format_template(record) if record else None
+
+    async def list_templates(self, user_id: str) -> List[Dict]:
+        """List all templates for a user."""
+        records = await self.client.messagetemplate.find_many(
+            where={"user_id": str(user_id)}, order={"name": "asc"}
+        )
+        return [self._format_template(r) for r in records]
+
+    async def delete_template(self, user_id: str, name: str) -> bool:
+        """Delete a template by name. Returns True if it existed."""
+        if not await self.get_template(user_id, name):
+            return False
+        await self.client.messagetemplate.delete(
+            where={"user_id_name": {"user_id": str(user_id), "name": name}}
+        )
+        return True
+
+    def _format_template(self, record) -> Dict:
+        """Format a Prisma MessageTemplate object to dict."""
+        return {
+            "id": record.id,
+            "user_id": record.user_id,
+            "name": record.name,
+            "message_content": record.message_content,
+            "destinations": deserialize_destinations(record.destinations),
+            "embed_data": record.embed_data,
+            "created_at": record.created_at,
+        }

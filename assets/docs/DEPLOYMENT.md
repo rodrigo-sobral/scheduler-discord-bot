@@ -207,7 +207,7 @@ docker ps | grep scheduler_bot
 # View logs
 docker logs scheduler_bot
 
-# Should see: "✅ Synced 7 slash command(s) with Discord"
+# Should see: "✅ Synced 11 slash command(s) with Discord"
 ```
 
 ## Step 7: Update When New Code Is Pushed

@@ -3,6 +3,7 @@ Message Delivery Service
 Handles sending scheduled messages to Discord users and channels
 """
 
+import json
 import logging
 from typing import List, Dict, Optional
 import discord
@@ -49,7 +50,7 @@ class MessageDeliveryService:
 
             # Send to each destination
             for dest_id in destinations:
-                success = await self._send_to_destination(dest_id, content, creator_id)
+                success = await self._send_to_destination(dest_id, content, creator_id, message.get("embed_data"))
 
                 if success:
                     successful_destinations.append(dest_id)
@@ -83,7 +84,7 @@ class MessageDeliveryService:
             logger.error(f"Message {message.get('id')}: {error_msg}", exc_info=e)
             return False, error_msg
 
-    async def _send_to_destination(self, dest_id: str, content: str, creator_id: str) -> bool:
+    async def _send_to_destination(self, dest_id: str, content: str, creator_id: str, embed_data: Optional[str] = None) -> bool:
         """
         Send a message to a single destination (user or channel)
 
@@ -99,7 +100,7 @@ class MessageDeliveryService:
             # Try to get user first
             try:
                 user = await self.bot.fetch_user(int(dest_id))
-                await self._send_message(user, content, creator_id, is_dm=True)
+                await self._send_message(user, content, creator_id, is_dm=True, embed_data=embed_data)
                 logger.info(f"Message delivered to user {dest_id}")
                 return True
             except (discord.NotFound, discord.Forbidden, ValueError):
@@ -113,7 +114,7 @@ class MessageDeliveryService:
                         logger.warning(f"Channel {dest_id} not found")
                         return False
 
-                    await self._send_message(channel, content, creator_id, is_dm=False)
+                    await self._send_message(channel, content, creator_id, is_dm=False, embed_data=embed_data)
                     logger.info(f"Message delivered to channel {dest_id}")
                     return True
                 except (discord.NotFound, discord.Forbidden, ValueError):
@@ -131,7 +132,7 @@ class MessageDeliveryService:
             return False
 
     async def _send_message(
-        self, destination, content: str, creator_id: Optional[str] = None, is_dm: bool = False
+        self, destination, content: str, creator_id: Optional[str] = None, is_dm: bool = False, embed_data: Optional[str] = None
     ) -> None:
         """
         Send a message to a user or channel with creator mention
@@ -158,10 +159,17 @@ class MessageDeliveryService:
                 # Fallback to mention format if fetch fails
                 creator_mention = f"<@{creator_id}>"
 
-        # Create embed with creator mention
-        embed = discord.Embed(
-            title=f"📨 Message from {creator_mention}", description=content, color=discord.Color.blurple()
-        )
+        # Create embed with creator mention, honouring any custom embed config
+        ed = json.loads(embed_data) if embed_data else {}
+        title = ed.get("title") or f"📨 Message from {creator_mention}"
+        url   = ed.get("url") or None
+        color = discord.Color.blurple()
+        if ed.get("color"):
+            try:
+                color = discord.Color(int(ed["color"].lstrip("#"), 16))
+            except (ValueError, AttributeError):
+                pass
+        embed = discord.Embed(title=title, description=content, color=color, url=url)
 
         # Send the message
         if isinstance(destination, discord.TextChannel):
@@ -188,16 +196,24 @@ class MessageDeliveryService:
         try:
             creator = await self.bot.fetch_user(int(creator_id))
 
+            total_failure = len(successful_dests) == 0
+
             # Build confirmation embed
             embed = discord.Embed(
-                title="✅ Message Delivery Confirmation",
-                description="Your scheduled message has been delivered!",
-                color=discord.Color.green(),
+                title="❌ Message Delivery Failed" if total_failure else "✅ Message Delivery Confirmation",
+                description=(
+                    "Your scheduled message could not be delivered to any destination. "
+                    "The original content is preserved below so you don't lose it."
+                    if total_failure else
+                    "Your scheduled message has been delivered!"
+                ),
+                color=discord.Color.red() if total_failure else discord.Color.green(),
             )
 
-            # Add original message preview
+            # Add original message preview — full content on failure so it can be copied
+            content_display = content if total_failure else content[:256] + ("..." if len(content) > 256 else "")
             embed.add_field(
-                name="Your Message", value=content[:256] + ("..." if len(content) > 256 else ""), inline=False
+                name="Your Message", value=content_display[:1000] + ("..." if len(content_display) > 1000 else ""), inline=False
             )
 
             # Add delivery status
@@ -258,6 +274,7 @@ class MessageDeliveryService:
                 day=d, month=mo, year=y,
                 hour=h, minute=m,
                 repeat_interval=message["repeat_interval"],
+                embed_data=message.get("embed_data"),
             )
             logger.info(f"Recurring message {message['id']} rescheduled for {y:04d}-{mo:02d}-{d:02d} {h:02d}:{m:02d}")
         except Exception as e:

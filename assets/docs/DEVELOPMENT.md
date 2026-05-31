@@ -72,7 +72,7 @@ uv run python -m src
 
 You should see:
 ```
-✅ Synced 7 slash command(s) with Discord
+✅ Synced 11 slash command(s) with Discord
 ```
 
 Test in Discord by typing `/` to see available commands.
@@ -89,10 +89,19 @@ With the bot running, test each command:
 /sch "Test" @user 15:30            # Schedule (structured time)
 /sch "Lunch" @user "in 2 hours"    # Schedule (natural language)
 /sch "Stand-up" #general "tomorrow at 9am" repeat:Daily  # Recurring
+/sch "Alert" @user "in 1 hour" embed_title:"Reminder" embed_color:"ff6b6b"  # Rich embed
 
-/ls                                # List pending — shows colour-coded urgency + Edit/Delete buttons
+/ls                                # List pending — colour-coded urgency + Edit/Pause/Delete buttons
+/pause 1                           # Pause message at position 1
+/resume 1                          # Resume it
+/dup 0 18:00                       # Clone message #0 with a new time
 /del 0                             # Delete message at position 0
 /mv time 0 20:00                   # Update time
+
+/tpl save name:standup message:"Stand-up time!" destinations:"#general"
+/tpl use name:standup time:"tomorrow 9am"
+/tpl list
+/tpl delete name:standup
 
 /history                           # View last 10 delivered messages
 /history 25                        # View last 25
