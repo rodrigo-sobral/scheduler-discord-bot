@@ -34,8 +34,8 @@ A Discord bot that schedules messages to users and channels at specific times wi
 | `/resume` | Re-activate a paused message |
 | `/tpl save` | Save a reusable message template (content + destinations) |
 | `/tpl use` | Schedule a message from a saved template |
-| `/tpl list` | List all saved templates |
-| `/tpl delete` | Delete a saved template |
+| `/tpl ls` | List all saved templates |
+| `/tpl del` | Delete a saved template |
 | `/history` | View previously delivered messages |
 | `/tz set` | Set your personal timezone (IANA name, e.g. `Europe/Lisbon`) |
 | `/tz get` | Show your current timezone setting |
@@ -62,8 +62,8 @@ A Discord bot that schedules messages to users and channels at specific times wi
 # Templates
 /tpl save name:standup message:"Daily stand-up time!" destinations:"#general"
 /tpl use name:standup time:"tomorrow 9am" repeat:Daily
-/tpl list
-/tpl delete name:standup
+/tpl ls
+/tpl del name:standup
 
 # History
 /history

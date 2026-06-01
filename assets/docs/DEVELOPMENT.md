@@ -100,8 +100,8 @@ With the bot running, test each command:
 
 /tpl save name:standup message:"Stand-up time!" destinations:"#general"
 /tpl use name:standup time:"tomorrow 9am"
-/tpl list
-/tpl delete name:standup
+/tpl ls
+/tpl del name:standup
 
 /history                           # View last 10 delivered messages
 /history 25                        # View last 25

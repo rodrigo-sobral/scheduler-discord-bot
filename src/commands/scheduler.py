@@ -392,14 +392,14 @@ class SchedulerCommands(commands.Cog):
                 ),
                 inline=False,
             )
-            embed.add_field(name="/tpl list", value="List all your saved templates.", inline=False)
-            embed.add_field(name="/tpl delete", value="Delete a template by name.", inline=False)
+            embed.add_field(name="/tpl ls", value="List all your saved templates.", inline=False)
+            embed.add_field(name="/tpl del", value="Delete a template by name.", inline=False)
             embed.add_field(
                 name="Examples",
                 value=(
                     '`/tpl save name:standup message:"Daily stand-up!" destinations:"#general"`\n'
                     '`/tpl use name:standup time:"tomorrow 9am" repeat:Daily`\n'
-                    "`/tpl list`\n`/tpl delete name:standup`"
+                    "`/tpl ls`\n`/tpl del name:standup`"
                 ),
                 inline=False,
             )
@@ -418,7 +418,7 @@ class SchedulerCommands(commands.Cog):
             embed.add_field(name="/dup",     value="Clone a pending message with a new delivery time", inline=False)
             embed.add_field(name="/pause",   value="Suspend a message without deleting it", inline=False)
             embed.add_field(name="/resume",  value="Re-activate a paused message", inline=False)
-            embed.add_field(name="/tpl",     value="Save and reuse message templates (`/tpl save`, `/tpl use`, `/tpl list`, `/tpl delete`)", inline=False)
+            embed.add_field(name="/tpl",     value="Save and reuse message templates (`/tpl save`, `/tpl use`, `/tpl ls`, `/tpl del`)", inline=False)
             embed.add_field(name="/history", value="View previously delivered messages", inline=False)
             embed.add_field(name="/tz",      value="Set or view your personal timezone (`/tz set`, `/tz get`)", inline=False)
             embed.set_footer(text="Scheduler Bot - Discord Application Commands")
@@ -960,7 +960,7 @@ class SchedulerCommands(commands.Cog):
             tpl = await self.db.get_template(str(interaction.user.id), name)
             if not tpl:
                 await interaction.response.send_message(
-                    embed=discord.Embed(title="❌ Error", description=f"No template named `{name}`. Use `/tpl list` to see your templates.", color=discord.Color.red()),
+                    embed=discord.Embed(title="❌ Error", description=f"No template named `{name}`. Use `/tpl ls` to see your templates.", color=discord.Color.red()),
                     ephemeral=True,
                 )
                 return
@@ -1023,7 +1023,7 @@ class SchedulerCommands(commands.Cog):
                 embed=discord.Embed(title="❌ Failed to save", description=str(e), color=discord.Color.red()), view=None
             )
 
-    @tpl_group.command(name="list", description="List all your saved templates")
+    @tpl_group.command(name="ls", description="List all your saved templates")
     async def tpl_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         templates = await self.db.list_templates(str(interaction.user.id))
@@ -1041,7 +1041,7 @@ class SchedulerCommands(commands.Cog):
         embed.set_footer(text="Use /tpl use name:<name> time:<time> to schedule a template.")
         await interaction.followup.send(embed=embed)
 
-    @tpl_group.command(name="delete", description="Delete a saved template")
+    @tpl_group.command(name="del", description="Delete a saved template")
     @app_commands.describe(name="Template name to delete")
     async def tpl_delete(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer()
