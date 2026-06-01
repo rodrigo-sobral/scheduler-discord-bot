@@ -13,6 +13,14 @@ import dateparser
 import discord
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+try:
+    from geonamescache import GeonamesCache
+
+    gc = GeonamesCache()
+    _geonames_available = True
+except ImportError:
+    _geonames_available = False
+
 
 class ValidationError(Exception):
     """Custom error for validation failures"""
@@ -388,6 +396,110 @@ def validate_timezone(tz_name: str) -> None:
         )
 
 
+def city_to_timezone(city: str) -> str:
+    """
+    Convert a city name to IANA timezone using modern geonamescache 3.0+ API.
+
+    Uses search_cities() with intelligent filtering strategy:
+    1. Exact name matches → picks highest population
+    2. Names starting with query → picks highest population
+    3. All results → picks highest population
+
+    Args:
+        city: City name (case-insensitive, e.g., "Tokyo", "London", "New York")
+
+    Returns:
+        IANA timezone name
+
+    Raises:
+        ValidationError: If city not found
+    """
+    if not _geonames_available:
+        raise ValidationError(
+            "Geonames library not available. Use IANA timezone directly (e.g., `Europe/Lisbon`, `America/New_York`)"
+        )
+
+    city = city.strip()
+    if not city:
+        raise ValidationError("City name cannot be empty.")
+
+    city_lower = city.lower()
+
+    # Use search_cities() - the modern method in geonamescache 3.0+
+    try:
+        results = gc.search_cities(city)
+        if not results:
+            raise ValidationError(f"City `{city}` not found.")
+
+        # Strategy 1: Look for exact name matches (case-insensitive)
+        exact_matches = [c for c in results if c.get("name", "").lower() == city_lower]
+        if exact_matches:
+            # If multiple exact matches, pick the highest population
+            best = max(exact_matches, key=lambda x: x.get("population", 0) or 0)
+            timezone = best.get("timezone")
+            if timezone:
+                return timezone
+
+        # Strategy 2: Filter for good matches (name starts with query) and pick by population
+        good_matches = [c for c in results if c.get("name", "").lower().startswith(city_lower)]
+        if good_matches:
+            # Sort by population descending to get the most significant city
+            best = max(good_matches, key=lambda x: x.get("population", 0) or 0)
+            timezone = best.get("timezone")
+            if timezone:
+                return timezone
+
+        # Strategy 3: Return highest population city from all results
+        best = max(results, key=lambda x: x.get("population", 0) or 0)
+        timezone = best.get("timezone")
+        if timezone:
+            return timezone
+
+    except ValidationError:
+        raise
+    except Exception as e:
+        raise ValidationError(f"Error searching cities: {e}")
+
+    raise ValidationError(
+        f"City `{city}` not found in geonames database.\n"
+        f"Try: city name like `Tokyo`, `London`, `New York`, `Berlin`\n"
+        f"Or use IANA timezone directly (e.g., `Europe/Lisbon`, `America/New_York`)"
+    )
+
+
+def resolve_timezone(input_str: str) -> str:
+    """
+    Resolve timezone from either a city name or IANA timezone name.
+
+    Args:
+        input_str: City name or IANA timezone
+
+    Returns:
+        IANA timezone name
+
+    Raises:
+        ValidationError: If neither valid city nor timezone
+    """
+    # First, try as IANA timezone
+    try:
+        validate_timezone(input_str)
+        return input_str
+    except ValidationError:
+        pass
+
+    # Then, try as city name
+    try:
+        return city_to_timezone(input_str)
+    except ValidationError:
+        pass
+
+    raise ValidationError(
+        f"Invalid timezone or city: `{input_str}`.\n"
+        f"Use either:\n"
+        f"• A city name (e.g., `Tokyo`, `London`, `New York`)\n"
+        f"• An IANA timezone (e.g., `Europe/Lisbon`, `America/New_York`)"
+    )
+
 def parse_time_expression(expr: str, user_tz: str = "UTC") -> Tuple[int, int, Optional[int], Optional[int], Optional[int]]:
     """
     Parse a time expression (natural language or structured) and return
@@ -513,3 +625,40 @@ def compute_next_recurrence(message: Dict) -> Optional[Tuple[int, int, Optional[
         return None
 
     return nxt.hour, nxt.minute, nxt.day, nxt.month, nxt.year
+
+async def format_destinations_with_names(bot, destination_ids: list[str], max_names: int = 5) -> str:
+    """
+    Format destination IDs as readable names (usernames or channel names).
+
+    Args:
+        bot: Discord bot instance to fetch user/channel info
+        destination_ids: List of Discord user/channel IDs
+        max_names: Maximum names to show before using count
+
+    Returns:
+        Formatted string with names or count
+    """
+    if not destination_ids:
+        return "No destinations"
+
+    names = []
+    for dest_id in destination_ids[:max_names]:
+        try:
+            # Try to fetch as user first
+            user = await bot.fetch_user(int(dest_id))
+            names.append(f"@{user.name}")
+        except discord.NotFound, ValueError:
+            try:
+                # Try to fetch as channel
+                channel = bot.get_channel(int(dest_id))
+                if channel:
+                    names.append(f"#{channel.name}")
+                else:
+                    names.append(f"ID:{dest_id[:8]}")
+            except ValueError:
+                names.append(dest_id)
+
+    if len(destination_ids) > max_names:
+        return ", ".join(names) + f" +{len(destination_ids) - max_names} more"
+
+    return ", ".join(names)

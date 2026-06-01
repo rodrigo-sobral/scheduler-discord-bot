@@ -22,11 +22,12 @@ from ..utils import (
     parse_destinations,
     validate_message_content,
     format_delivery_time,
+    format_destinations_with_names,
     get_queue_position,
     parse_time_expression,
     get_relative_time_str,
     get_urgency_color,
-    validate_timezone,
+    resolve_timezone,
 )
 from ..db import DatabaseManager
 
@@ -324,8 +325,8 @@ class SchedulerCommands(commands.Cog):
                 value=(
                     "Set your personal timezone. All times you provide to `/sch` and `/mv` "
                     "are interpreted in this timezone, and displayed back to you in it.\n"
-                    "• `timezone` *(required)*: IANA timezone name\n"
-                    "Examples: `Europe/Lisbon`, `America/New_York`, `Asia/Tokyo`, `UTC`"
+                    "• `city` *(required)*: Name of a major city in your timezone or a valid tz database name"
+                    "Examples: `/tz set city:Lisbon` or `/tz set city:Europe/Lisbon`"
                 ),
                 inline=False,
             )
@@ -480,7 +481,11 @@ class SchedulerCommands(commands.Cog):
         # Show preview and wait for confirm/cancel
         preview = discord.Embed(title="📋 Confirm scheduled message", description=message[:1024], color=discord.Color.gold())
         preview.add_field(name="⏰ Delivery", value=f"{delivery_str}\n`{rel_str}`", inline=True)
-        preview.add_field(name="📬 Destinations", value=f"{len(dests)} recipient(s)", inline=True)
+
+        # Format destinations with actual usernames
+        dest_display = await format_destinations_with_names(self.bot, dests)
+        preview.add_field(name="📬 Destinations", value=dest_display, inline=True)
+
         if repeat_interval:
             preview.add_field(name="🔁 Repeat", value=repeat_interval.capitalize(), inline=True)
         if embed_data:
@@ -525,7 +530,11 @@ class SchedulerCommands(commands.Cog):
             confirmed_embed.add_field(name="Message ID", value=str(position), inline=True)
             confirmed_embed.add_field(name="Content", value=message[:100], inline=False)
             confirmed_embed.add_field(name="Delivery Time", value=f"{delivery_str}\n`{rel_str}`", inline=True)
-            confirmed_embed.add_field(name="Destinations", value=f"{len(dests)} recipient(s)", inline=True)
+
+            # Show usernames in confirmed message too
+            dest_display_confirmed = await format_destinations_with_names(self.bot, dests)
+            confirmed_embed.add_field(name="📬 Destinations", value=dest_display_confirmed, inline=True)
+
             if repeat_interval:
                 confirmed_embed.add_field(name="🔁 Repeat", value=repeat_interval.capitalize(), inline=True)
             await interaction.edit_original_response(embed=confirmed_embed, view=None)
@@ -579,10 +588,14 @@ class SchedulerCommands(commands.Cog):
 
                 repeat_tag = f"  🔁 {msg['repeat_interval'].capitalize()}" if msg.get("repeat_interval") else ""
                 paused_tag = "  ⏸️ Paused" if msg.get("paused") else ""
+
+                # Format destinations with actual usernames
+                dest_display = await format_destinations_with_names(self.bot, msg["destinations"], max_names=3)
+
                 field_value = (
                     f"{dot} {delivery_time} — `{rel_str}`{repeat_tag}{paused_tag}\n"
                     f"Content: {content_preview}\n"
-                    f"Dest: {len(msg['destinations'])} recipient(s)"
+                    f"Dest: {dest_display}"
                 )
                 embed.add_field(name=f"[{idx}]", value=field_value, inline=False)
 
@@ -758,7 +771,11 @@ class SchedulerCommands(commands.Cog):
                 sent_str = sent_at.strftime("%Y-%m-%d %H:%M UTC") if sent_at else "unknown"
                 preview = msg["message_content"][:80] + ("..." if len(msg["message_content"]) > 80 else "")
                 repeat_tag = f" · 🔁 {msg['repeat_interval'].capitalize()}" if msg.get("repeat_interval") else ""
-                field_value = f"**Sent:** {sent_str}{repeat_tag}\n**To:** {len(msg['destinations'])} recipient(s)\n> {preview}"
+
+                # Format destinations with usernames
+                dest_display = await format_destinations_with_names(self.bot, msg["destinations"], max_names=3)
+
+                field_value = f"**Sent:** {sent_str}{repeat_tag}\n**To:** {dest_display}\n> {preview}"
                 embed.add_field(name="\u200b", value=field_value, inline=False)
 
             embed.set_footer(text=f"Showing {len(messages)} most recent deliveries.")
@@ -771,19 +788,21 @@ class SchedulerCommands(commands.Cog):
     # ======================== /tz Commands ========================
     tz_group = app_commands.Group(name="tz", description="Manage your personal timezone")
 
-    @tz_group.command(name="set", description="Set your timezone (IANA name, e.g. Europe/Lisbon)")
-    @app_commands.describe(timezone="IANA timezone name — e.g. Europe/Lisbon, America/New_York, UTC")
-    async def tz_set(self, interaction: discord.Interaction, timezone: str) -> None:
+    @tz_group.command(name="set", description="Set your timezone by city name or IANA timezone")
+    @app_commands.describe(city="City name (e.g., Tokyo, London, New York) or IANA timezone name")
+    async def tz_set(self, interaction: discord.Interaction, city: str) -> None:
         await interaction.response.defer(ephemeral=True)
         try:
-            validate_timezone(timezone)
-            await self.db.set_user_timezone(str(interaction.user.id), timezone)
-            from zoneinfo import ZoneInfo
+            # Resolve timezone from either city name or IANA name
+            resolved_tz = resolve_timezone(city)
+            await self.db.set_user_timezone(str(interaction.user.id), resolved_tz)
             from datetime import datetime as _dt
-            sample = _dt.now(ZoneInfo(timezone)).strftime("%H:%M on %A, %d %b %Y")
+            from zoneinfo import ZoneInfo
+
+            sample = _dt.now(ZoneInfo(resolved_tz)).strftime("%H:%M on %A, %d %b %Y")
             embed = discord.Embed(
                 title="🌍 Timezone Updated",
-                description=f"Your timezone is now **{timezone}**.\nYour local time: `{sample}`\n\nAll future `/sch` times will be interpreted in this timezone.",
+                description=f"Your timezone is now **{resolved_tz}**.\nYour local time: `{sample}`\n\nAll future `/sch` times will be interpreted in this timezone.",
                 color=discord.Color.green(),
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -1014,7 +1033,11 @@ class SchedulerCommands(commands.Cog):
         embed = discord.Embed(title="📁 Your Templates", description=f"{len(templates)} saved template(s)", color=discord.Color.blue())
         for tpl in templates:
             preview = tpl["message_content"][:60] + ("..." if len(tpl["message_content"]) > 60 else "")
-            embed.add_field(name=f"`{tpl['name']}`", value=f"{len(tpl['destinations'])} recipient(s)\n> {preview}", inline=False)
+
+            # Format destinations with usernames
+            dest_display = await format_destinations_with_names(self.bot, tpl["destinations"], max_names=3)
+
+            embed.add_field(name=f"`{tpl['name']}`", value=f"Dest: {dest_display}\n> {preview}", inline=False)
         embed.set_footer(text="Use /tpl use name:<name> time:<time> to schedule a template.")
         await interaction.followup.send(embed=embed)
 
