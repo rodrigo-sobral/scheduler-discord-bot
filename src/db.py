@@ -80,7 +80,7 @@ class DatabaseManager:
         hour: int,
         minute: int,
         repeat_interval: Optional[str] = None,
-        embed_data: Optional[str] = None,
+        attachment_url: Optional[str] = None,
     ) -> Dict:
         """
         Create a new scheduled message
@@ -106,7 +106,7 @@ class DatabaseManager:
                 "delivery_hour": hour,
                 "delivery_minute": minute,
                 "repeat_interval": repeat_interval,
-                "embed_data": embed_data,
+                "attachment_url": attachment_url,
                 "delivered_at": None,
                 "failed": False,
             }
@@ -220,8 +220,8 @@ class DatabaseManager:
             update_data["delivery_hour"] = kwargs["delivery_hour"]
         if "delivery_minute" in kwargs:
             update_data["delivery_minute"] = kwargs["delivery_minute"]
-        if "embed_data" in kwargs:
-            update_data["embed_data"] = kwargs["embed_data"]
+        if "attachment_url" in kwargs:
+            update_data["attachment_url"] = kwargs["attachment_url"]
 
         if not update_data:
             return message
@@ -288,7 +288,7 @@ class DatabaseManager:
             "delivery_minute": message.delivery_minute,
             "repeat_interval": message.repeat_interval,
             "paused": message.paused,
-            "embed_data": message.embed_data,
+            "attachment_url": message.attachment_url,
             "created_at": message.created_at,
             "updated_at": message.updated_at,
             "delivered_at": message.delivered_at,
@@ -339,7 +339,7 @@ class DatabaseManager:
         )
         return self._format_message(updated)
 
-    async def save_template(self, user_id: str, name: str, content: str, destinations: List[str], embed_data: Optional[str] = None) -> Dict:
+    async def save_template(self, user_id: str, name: str, content: str, destinations: List[str]) -> Dict:
         """Create or overwrite a named message template."""
         record = await self.client.messagetemplate.upsert(
             where={"user_id_name": {"user_id": str(user_id), "name": name}},
@@ -349,12 +349,10 @@ class DatabaseManager:
                     "name": name,
                     "message_content": content,
                     "destinations": serialize_destinations(destinations),
-                    "embed_data": embed_data,
                 },
                 "update": {
                     "message_content": content,
                     "destinations": serialize_destinations(destinations),
-                    "embed_data": embed_data,
                 },
             },
         )
@@ -391,6 +389,5 @@ class DatabaseManager:
             "name": record.name,
             "message_content": record.message_content,
             "destinations": deserialize_destinations(record.destinations),
-            "embed_data": record.embed_data,
             "created_at": record.created_at,
         }

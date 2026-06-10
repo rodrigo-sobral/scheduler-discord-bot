@@ -3,7 +3,7 @@ Message Delivery Service
 Handles sending scheduled messages to Discord users and channels
 """
 
-import json
+import io
 import logging
 from typing import List, Dict, Optional
 import discord
@@ -50,7 +50,7 @@ class MessageDeliveryService:
 
             # Send to each destination
             for dest_id in destinations:
-                success = await self._send_to_destination(dest_id, content, creator_id, message.get("embed_data"))
+                success = await self._send_to_destination(dest_id, content, creator_id, message.get("attachment_url"))
 
                 if success:
                     successful_destinations.append(dest_id)
@@ -84,7 +84,7 @@ class MessageDeliveryService:
             logger.error(f"Message {message.get('id')}: {error_msg}", exc_info=e)
             return False, error_msg
 
-    async def _send_to_destination(self, dest_id: str, content: str, creator_id: str, embed_data: Optional[str] = None) -> bool:
+    async def _send_to_destination(self, dest_id: str, content: str, creator_id: str, attachment_url: Optional[str] = None) -> bool:
         """
         Send a message to a single destination (user or channel)
 
@@ -100,7 +100,7 @@ class MessageDeliveryService:
             # Try to get user first
             try:
                 user = await self.bot.fetch_user(int(dest_id))
-                await self._send_message(user, content, creator_id, is_dm=True, embed_data=embed_data)
+                await self._send_message(user, content, creator_id, is_dm=True, attachment_url=attachment_url)
                 logger.info(f"Message delivered to user {dest_id}")
                 return True
             except (discord.NotFound, discord.Forbidden, ValueError):
@@ -114,7 +114,7 @@ class MessageDeliveryService:
                         logger.warning(f"Channel {dest_id} not found")
                         return False
 
-                    await self._send_message(channel, content, creator_id, is_dm=False, embed_data=embed_data)
+                    await self._send_message(channel, content, creator_id, is_dm=False, attachment_url=attachment_url)
                     logger.info(f"Message delivered to channel {dest_id}")
                     return True
                 except (discord.NotFound, discord.Forbidden, ValueError):
@@ -132,7 +132,7 @@ class MessageDeliveryService:
             return False
 
     async def _send_message(
-        self, destination, content: str, creator_id: Optional[str] = None, is_dm: bool = False, embed_data: Optional[str] = None
+        self, destination, content: str, creator_id: Optional[str] = None, is_dm: bool = False, attachment_url: Optional[str] = None
     ) -> None:
         """
         Send a message to a user or channel with creator mention
@@ -159,25 +159,33 @@ class MessageDeliveryService:
                 # Fallback to mention format if fetch fails
                 creator_mention = f"<@{creator_id}>"
 
-        # Create embed with creator mention, honouring any custom embed config
-        ed = json.loads(embed_data) if embed_data else {}
-        title = ed.get("title") or f"📨 Message from {creator_mention}"
-        url   = ed.get("url") or None
-        color = discord.Color.blurple()
-        if ed.get("color"):
-            try:
-                color = discord.Color(int(ed["color"].lstrip("#"), 16))
-            except (ValueError, AttributeError):
-                pass
-        embed = discord.Embed(title=title, description=content, color=color, url=url)
+        # Create embed with creator mention, content, and attachment if present
+        embed = discord.Embed(
+            title=f"📨 Message from {creator_mention}",
+            description=content,
+            color=discord.Color.blurple(),
+        )
 
-        # Send the message
-        if isinstance(destination, discord.TextChannel):
-            await destination.send(embed=embed)
-        elif isinstance(destination, discord.User) or isinstance(destination, discord.Member):
-            await destination.send(embed=embed)
+        # Try to download and re-upload the attachment (CDN URLs can expire)
+        file_to_send = None
+        if attachment_url:
+            try:
+                import aiohttp
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(attachment_url) as resp:
+                        if resp.status == 200:
+                            data = await resp.read()
+                            filename = attachment_url.split("/")[-1].split("?")[0] or "attachment"
+                            file_to_send = discord.File(io.BytesIO(data), filename=filename)
+                        else:
+                            embed.add_field(name="⚠️ Attachment", value="The attachment could not be retrieved (link may have expired).", inline=False)
+            except Exception as e:
+                logger.warning(f"Could not download attachment {attachment_url}: {e}")
+                embed.add_field(name="⚠️ Attachment", value="The attachment could not be retrieved (link may have expired).", inline=False)
+
+        if file_to_send:
+            await destination.send(embed=embed, file=file_to_send)
         else:
-            # Fallback for any other sendable type
             await destination.send(embed=embed)
 
     async def _send_confirmation_to_creator(
@@ -274,7 +282,7 @@ class MessageDeliveryService:
                 day=d, month=mo, year=y,
                 hour=h, minute=m,
                 repeat_interval=message["repeat_interval"],
-                embed_data=message.get("embed_data"),
+                attachment_url=message.get("attachment_url"),
             )
             logger.info(f"Recurring message {message['id']} rescheduled for {y:04d}-{mo:02d}-{d:02d} {h:02d}:{m:02d}")
         except Exception as e:

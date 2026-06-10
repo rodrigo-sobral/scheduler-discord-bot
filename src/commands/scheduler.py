@@ -10,7 +10,6 @@ Follows Discord's Application Command structure (CHAT_INPUT type - type 1):
 Reference: https://docs.discord.com/developers/interactions/application-commands
 """
 
-import json
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -85,7 +84,7 @@ class EditMessageModal(discord.ui.Modal, title="Edit Scheduled Message"):
             required=True,
         )
         self.time_input: discord.ui.TextInput = discord.ui.TextInput(
-            label="Delivery time (e.g. tomorrow 3pm · 25/12 15:30)",
+            label="Delivery time (e.g. tomorrow 3pm)",
             default=format_delivery_time(
                 message.get("delivery_day"), message.get("delivery_month"),
                 message.get("delivery_year"), message["delivery_hour"], message["delivery_minute"],
@@ -226,7 +225,8 @@ class SchedulerCommands(commands.Cog):
                     "• `destinations` *(required)*: Space-separated user/channel mentions or IDs\n"
                     "• `time` *(required)*: Delivery time — HH:MM or natural language\n"
                     "• `date` *(optional)*: DD/MM or DD/MM/YYYY — only needed if not included in `time`\n"
-                    "• `repeat` *(optional)*: `daily`, `weekly`, `monthly`, or none"
+                    "• `repeat` *(optional)*: `daily`, `weekly`, `monthly`, or none\n"
+                    "• `attachment` *(optional)*: File to attach to the delivered message"
                 ),
                 inline=False,
             )
@@ -288,8 +288,8 @@ class SchedulerCommands(commands.Cog):
             embed.add_field(
                 name="Parameters",
                 value=(
-                    "• `field` *(required)*: `content`, `destinations`, `day`, or `time`\n"
                     "• `message_id` *(required)*: Queue position — `0` = next to send\n"
+                    "• `field` *(required)*: `content`, `destinations`, `day`, or `time`\n"
                     "• `new_value` *(required)*: New value for the field"
                 ),
                 inline=False,
@@ -297,10 +297,10 @@ class SchedulerCommands(commands.Cog):
             embed.add_field(
                 name="Examples",
                 value=(
-                    '`/mv field:content message_id:0 new_value:"Updated message"`\n'
-                    '`/mv field:time message_id:0 new_value:"20:00"`\n'
-                    '`/mv field:time message_id:1 new_value:"next Monday 9am"`\n'
-                    '`/mv field:day message_id:0 new_value:"25/12"`'
+                    '`/mv message_id:0 field:content new_value:"Updated message"`\n'
+                    '`/mv message_id:0 field:time new_value:"20:00"`\n'
+                    '`/mv message_id:1 field:time new_value:"next Monday 9am"`\n'
+                    '`/mv message_id:0 field:day new_value:"25/12"`'
                 ),
                 inline=False,
             )
@@ -395,10 +395,20 @@ class SchedulerCommands(commands.Cog):
             embed.add_field(name="/tpl ls", value="List all your saved templates.", inline=False)
             embed.add_field(name="/tpl del", value="Delete a template by name.", inline=False)
             embed.add_field(
+                name="/tpl from",
+                value=(
+                    "Create a template from an existing scheduled message.\n"
+                    "• `message_id` *(required)*: Queue position of the source message\n"
+                    "• `name` *(required)*: Name for the new template"
+                ),
+                inline=False,
+            )
+            embed.add_field(
                 name="Examples",
                 value=(
                     '`/tpl save name:standup message:"Daily stand-up!" destinations:"#general"`\n'
                     '`/tpl use name:standup time:"tomorrow 9am" repeat:Daily`\n'
+                    "`/tpl from message_id:0 name:standup`\n"
                     "`/tpl ls`\n`/tpl del name:standup`"
                 ),
                 inline=False,
@@ -418,7 +428,7 @@ class SchedulerCommands(commands.Cog):
             embed.add_field(name="/dup",     value="Clone a pending message with a new delivery time", inline=False)
             embed.add_field(name="/pause",   value="Suspend a message without deleting it", inline=False)
             embed.add_field(name="/resume",  value="Re-activate a paused message", inline=False)
-            embed.add_field(name="/tpl",     value="Save and reuse message templates (`/tpl save`, `/tpl use`, `/tpl ls`, `/tpl del`)", inline=False)
+            embed.add_field(name="/tpl",     value="Save and reuse message templates (`/tpl save`, `/tpl use`, `/tpl list`, `/tpl delete`)", inline=False)
             embed.add_field(name="/history", value="View previously delivered messages", inline=False)
             embed.add_field(name="/tz",      value="Set or view your personal timezone (`/tz set`, `/tz get`)", inline=False)
             embed.set_footer(text="Scheduler Bot - Discord Application Commands")
@@ -433,9 +443,7 @@ class SchedulerCommands(commands.Cog):
         time="Delivery time: HH:MM or natural language (e.g. tomorrow 3pm, next Friday, in 2 hours)",
         date="Optional: delivery date in DD/MM or DD/MM/YYYY format (STRING)",
         repeat="Optional: repeat interval for recurring messages",
-        embed_title="Optional: custom title for the delivered embed",
-        embed_color="Optional: embed color as hex (e.g. ff6b6b or #ff6b6b)",
-        embed_url="Optional: URL the embed title links to",
+        attachment="Optional: file to attach to the delivered message",
     )
     @app_commands.choices(repeat=REPEAT_CHOICES)
     async def schedule_message(
@@ -446,9 +454,7 @@ class SchedulerCommands(commands.Cog):
         time: str,
         date: Optional[str] = None,
         repeat: Optional[app_commands.Choice[str]] = None,
-        embed_title: Optional[str] = None,
-        embed_color: Optional[str] = None,
-        embed_url: Optional[str] = None,
+        attachment: Optional[discord.Attachment] = None,
     ) -> None:
         # Validate everything before sending any response
         try:
@@ -473,10 +479,7 @@ class SchedulerCommands(commands.Cog):
         repeat_interval = None if (repeat is None or repeat.value == "none") else repeat.value
         delivery_str = format_delivery_time(day, month, year, hour, minute, user_tz)
         rel_str = get_relative_time_str(day, month, year, hour, minute)
-
-        embed_data = None
-        if embed_title or embed_color or embed_url:
-            embed_data = json.dumps({k: v for k, v in {"title": embed_title, "color": embed_color, "url": embed_url}.items() if v})
+        attachment_url = attachment.url if attachment else None
 
         # Show preview and wait for confirm/cancel
         preview = discord.Embed(title="📋 Confirm scheduled message", description=message[:1024], color=discord.Color.gold())
@@ -488,9 +491,8 @@ class SchedulerCommands(commands.Cog):
 
         if repeat_interval:
             preview.add_field(name="🔁 Repeat", value=repeat_interval.capitalize(), inline=True)
-        if embed_data:
-            ed = json.loads(embed_data)
-            preview.add_field(name="🖼️ Embed", value=" · ".join(f"{k}: `{v}`" for k, v in ed.items()), inline=False)
+        if attachment:
+            preview.add_field(name="📎 Attachment", value=attachment.filename, inline=True)
         if user_tz != "UTC":
             preview.add_field(name="🌍 Timezone", value=user_tz, inline=True)
         preview.set_footer(text="You have 60 seconds to confirm or cancel.")
@@ -521,7 +523,7 @@ class SchedulerCommands(commands.Cog):
                 day=day, month=month, year=year,
                 hour=hour, minute=minute,
                 repeat_interval=repeat_interval,
-                embed_data=embed_data,
+                attachment_url=attachment_url,
             )
             all_messages = await self.db.get_user_messages(str(interaction.user.id), include_delivered=False)
             position = get_queue_position(all_messages, msg["id"])
@@ -656,14 +658,14 @@ class SchedulerCommands(commands.Cog):
         new_value="New value for the field (STRING)",
     )
     async def update_message(
-        self, interaction: discord.Interaction, field: str, message_id: str, new_value: str
+        self, interaction: discord.Interaction, message_id: str, field: str, new_value: str
     ) -> None:
         """
         Update a pending scheduled message field.
 
         CHAT_INPUT command with 3 required options:
-        - field (STRING): Which field to update
         - message_id (STRING): Position in queue
+        - field (STRING): Which field to update
         - new_value (STRING): The new value
         """
         await interaction.response.defer()
@@ -960,7 +962,7 @@ class SchedulerCommands(commands.Cog):
             tpl = await self.db.get_template(str(interaction.user.id), name)
             if not tpl:
                 await interaction.response.send_message(
-                    embed=discord.Embed(title="❌ Error", description=f"No template named `{name}`. Use `/tpl ls` to see your templates.", color=discord.Color.red()),
+                    embed=discord.Embed(title="❌ Error", description=f"No template named `{name}`. Use `/tpl list` to see your templates.", color=discord.Color.red()),
                     ephemeral=True,
                 )
                 return
@@ -1005,7 +1007,6 @@ class SchedulerCommands(commands.Cog):
                 day=d, month=mo, year=y,
                 hour=h, minute=m,
                 repeat_interval=repeat_interval,
-                embed_data=tpl.get("embed_data"),
             )
             all_messages = await self.db.get_user_messages(str(interaction.user.id), include_delivered=False)
             position = get_queue_position(all_messages, msg["id"])
@@ -1024,7 +1025,7 @@ class SchedulerCommands(commands.Cog):
             )
 
     @tpl_group.command(name="ls", description="List all your saved templates")
-    async def tpl_list(self, interaction: discord.Interaction) -> None:
+    async def tpl_ls(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         templates = await self.db.list_templates(str(interaction.user.id))
         if not templates:
@@ -1043,13 +1044,48 @@ class SchedulerCommands(commands.Cog):
 
     @tpl_group.command(name="del", description="Delete a saved template")
     @app_commands.describe(name="Template name to delete")
-    async def tpl_delete(self, interaction: discord.Interaction, name: str) -> None:
+    async def tpl_del(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer()
         deleted = await self.db.delete_template(str(interaction.user.id), name)
         if deleted:
             await interaction.followup.send(embed=discord.Embed(title="🗑️ Template Deleted", description=f"Template `{name}` removed.", color=discord.Color.green()))
         else:
             await interaction.followup.send(embed=discord.Embed(title="❌ Not Found", description=f"No template named `{name}`.", color=discord.Color.red()))
+
+    @tpl_group.command(name="from", description="Create a template from an existing scheduled message")
+    @app_commands.describe(
+        message_id="Queue position of the source message (0 = next to send)",
+        name="Name for the new template",
+    )
+    async def tpl_from(self, interaction: discord.Interaction, message_id: str, name: str) -> None:
+        await interaction.response.defer()
+        try:
+            messages = await self.db.get_user_messages(str(interaction.user.id), include_delivered=False)
+            try:
+                pos = int(message_id)
+                if not 0 <= pos < len(messages):
+                    raise ValidationError(f"Position {pos} out of range (0-{len(messages) - 1}).")
+                source = messages[pos]
+            except ValueError:
+                source = await self.db.get_message(message_id, str(interaction.user.id))
+                if not source:
+                    raise ValidationError("Message not found.")
+
+            await self.db.save_template(
+                str(interaction.user.id), name, source["message_content"], source["destinations"]
+            )
+
+            dest_display = await format_destinations_with_names(self.bot, source["destinations"])
+            embed = discord.Embed(title="📁 Template Created", color=discord.Color.green())
+            embed.add_field(name="Name", value=f"`{name}`", inline=True)
+            embed.add_field(name="Source", value=f"Message #{message_id}", inline=True)
+            embed.add_field(name="Destinations", value=dest_display, inline=True)
+            embed.add_field(name="Content", value=source["message_content"][:100], inline=False)
+            embed.set_footer(text=f"Use /tpl use name:{name} time:<time> to schedule it.")
+            await interaction.followup.send(embed=embed)
+
+        except ValidationError as e:
+            await interaction.followup.send(embed=discord.Embed(title="❌ Error", description=str(e), color=discord.Color.red()))
 
 
 async def setup(bot: commands.Bot) -> None:

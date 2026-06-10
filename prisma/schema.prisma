@@ -26,7 +26,7 @@ model ScheduledMessage {
   delivery_minute Int      // Minute (0-59) - mandatory
   repeat_interval String?  // null = one-time | "daily" | "weekly" | "monthly"
   paused          Boolean  @default(false)
-  embed_data      String?  // JSON: {title?, color?, url?}
+  attachment_url  String?  // CDN URL of an optional attached file
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
   delivered_at    DateTime? // Timestamp when message was successfully delivered
@@ -54,7 +54,6 @@ model MessageTemplate {
   name            String
   message_content String
   destinations    String   // JSON-serialized List[str]
-  embed_data      String?  // JSON: {title?, color?, url?}
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 

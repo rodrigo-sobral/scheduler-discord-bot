@@ -90,7 +90,7 @@ async def on_ready():
         logger.error(f"❌ Failed to sync commands with Discord: {e}", exc_info=e)
 
     # Set bot activity
-    activity = discord.Activity(type=discord.ActivityType.watching, name="your scheduled messages | /help")
+    activity = discord.Activity(type=discord.ActivityType.watching, name="📬 Message Scheduler")
     await bot.change_presence(activity=activity)
 
     # Start the message delivery task
