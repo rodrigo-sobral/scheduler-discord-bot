@@ -570,7 +570,11 @@ class SchedulerCommands(commands.Cog):
                 await interaction.followup.send(embed=embed)
                 return
 
-            embed = discord.Embed(title="📅 Your Pending Scheduled Messages", color=discord.Color.blue())
+            embed = discord.Embed(
+                title=f"📅 Your Pending Scheduled Messages",
+                description=f"Total: {len(messages)} message(s). Use buttons or `/mv`, `/pause`, `/del`.",
+                color=discord.Color.blue()
+            )
 
             for idx, msg in enumerate(messages):
                 d = msg.get("delivery_day")
@@ -597,11 +601,12 @@ class SchedulerCommands(commands.Cog):
                 field_value = (
                     f"{dot} {delivery_time} — `{rel_str}`{repeat_tag}{paused_tag}\n"
                     f"Content: {content_preview}\n"
-                    f"Dest: {dest_display}"
+                    f"Dest: {dest_display}\n"
+                    f"Attachment: {msg.get('attachment_url', '-')}"
                 )
                 embed.add_field(name=f"[{idx}]", value=field_value, inline=False)
 
-            embed.set_footer(text=f"Total: {len(messages)} message(s). Use buttons or /del to delete.")
+            embed.set_footer(text=f"Legend: 🔴 <1h | 🟠 <24h | 🟢 24h+")
             view = QueueView(messages, self.db, user_tz, str(interaction.user.id))
             await interaction.followup.send(embed=embed, view=view)
 
