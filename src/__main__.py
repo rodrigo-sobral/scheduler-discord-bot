@@ -7,6 +7,7 @@ import os
 import asyncio
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import discord
 from discord.ext import commands, tasks
@@ -47,6 +48,17 @@ def setup_logging():
     # Add handlers
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
+
+    # Reduce logging noise from libraries
+    for noisy in [
+        "prisma",
+        "httpcore",
+        "httpx",
+        "discord.http",
+        "discord.gateway",
+        "asyncio",
+    ]:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     return logger
 
@@ -147,8 +159,12 @@ async def message_delivery_loop():
 
         # Check each message to see if it's time to deliver
         for message in pending_messages:
+            # Get user timezone from database
+            user_tz = (await db_manager.get_user_timezone(message["user_id"])).get("timezone", "UTC")
+            tzinfo = ZoneInfo(user_tz)
+
             # Check if delivery time has arrived
-            if is_delivery_time(message):
+            if is_delivery_time(message, tzinfo=tzinfo):
                 logger.info(f"Delivering message {message['id']} to {len(message['destinations'])} destination(s)")
 
                 # Attempt delivery

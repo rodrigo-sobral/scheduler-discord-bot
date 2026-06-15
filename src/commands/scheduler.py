@@ -14,6 +14,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import Optional
+from zoneinfo import ZoneInfo
 from ..utils import (
     ValidationError,
     parse_time_input,
@@ -461,6 +462,7 @@ class SchedulerCommands(commands.Cog):
             validate_message_content(message)
             dests = parse_destinations(destinations)
             user_tz = await self._get_user_tz(str(interaction.user.id))
+            tzinfo = ZoneInfo(user_tz)
             expr = f"{date} {time}".strip() if date else time
             hour, minute, day, month, year = parse_time_expression(expr, user_tz)
         except ValidationError as e:
@@ -478,7 +480,7 @@ class SchedulerCommands(commands.Cog):
 
         repeat_interval = None if (repeat is None or repeat.value == "none") else repeat.value
         delivery_str = format_delivery_time(day, month, year, hour, minute, user_tz)
-        rel_str = get_relative_time_str(day, month, year, hour, minute)
+        rel_str = get_relative_time_str(day, month, year, hour, minute, tzinfo)
         attachment_url = attachment.url if attachment else None
 
         # Show preview and wait for confirm/cancel
@@ -559,6 +561,7 @@ class SchedulerCommands(commands.Cog):
 
         try:
             user_tz = await self._get_user_tz(str(interaction.user.id))
+            tzinfo = ZoneInfo(user_tz)
             messages = await self.db.get_user_messages(str(interaction.user.id), include_delivered=False)
 
             if not messages:
@@ -584,8 +587,8 @@ class SchedulerCommands(commands.Cog):
                 m = msg["delivery_minute"]
 
                 delivery_time = format_delivery_time(d, mo, y, h, m, user_tz)
-                rel_str = get_relative_time_str(d, mo, y, h, m)
-                color = get_urgency_color(d, mo, y, h, m)
+                rel_str = get_relative_time_str(d, mo, y, h, m, tzinfo)
+                color = get_urgency_color(d, mo, y, h, m, tzinfo)
                 dot = "🔴" if color == discord.Color.red() else "🟠" if color == discord.Color.orange() else "🟢"
 
                 content_preview = msg["message_content"][:50]
@@ -602,7 +605,7 @@ class SchedulerCommands(commands.Cog):
                     f"{dot} {delivery_time} — `{rel_str}`{repeat_tag}{paused_tag}\n"
                     f"Content: {content_preview}\n"
                     f"Dest: {dest_display}\n"
-                    f"Attachment: {msg.get('attachment_url', '-')}"
+                    f"Attachment: {msg.get('attachment_url', 'None')}"
                 )
                 embed.add_field(name=f"[{idx}]", value=field_value, inline=False)
 
@@ -846,7 +849,7 @@ class SchedulerCommands(commands.Cog):
             try:
                 pos = int(message_id)
                 if not 0 <= pos < len(messages):
-                    raise ValidationError(f"Position {pos} out of range (0–{len(messages) - 1}).")
+                    raise ValidationError(f"Position {pos} out of range (0-{len(messages) - 1}).")
                 source = messages[pos]
             except ValueError:
                 source = await self.db.get_message(message_id, str(interaction.user.id))
@@ -873,7 +876,7 @@ class SchedulerCommands(commands.Cog):
             embed = discord.Embed(title="📋 Message Duplicated", color=discord.Color.green())
             embed.add_field(name="Cloned from", value=f"#{pos if message_id.isdigit() else 'ID'}", inline=True)
             embed.add_field(name="New position", value=f"#{new_pos}", inline=True)
-            embed.add_field(name="Delivery time", value=f"{delivery_str}\n`{get_relative_time_str(d, mo, y, h, m)}`", inline=False)
+            embed.add_field(name="Delivery time", value=f"{delivery_str}\n`{get_relative_time_str(d, mo, y, h, m, user_tz)}`", inline=False)
             embed.add_field(name="Content", value=source["message_content"][:100], inline=False)
             await interaction.followup.send(embed=embed)
 
@@ -890,7 +893,7 @@ class SchedulerCommands(commands.Cog):
             try:
                 pos = int(message_id)
                 if not 0 <= pos < len(messages):
-                    raise ValidationError(f"Position {pos} out of range (0–{len(messages) - 1}).")
+                    raise ValidationError(f"Position {pos} out of range (0-{len(messages) - 1}).")
                 actual_id = messages[pos]["id"]
             except ValueError:
                 actual_id = message_id
@@ -915,7 +918,7 @@ class SchedulerCommands(commands.Cog):
             try:
                 pos = int(message_id)
                 if not 0 <= pos < len(messages):
-                    raise ValidationError(f"Position {pos} out of range (0–{len(messages) - 1}).")
+                    raise ValidationError(f"Position {pos} out of range (0-{len(messages) - 1}).")
                 actual_id = messages[pos]["id"]
             except ValueError:
                 actual_id = message_id
@@ -983,7 +986,7 @@ class SchedulerCommands(commands.Cog):
 
         repeat_interval = None if (repeat is None or repeat.value == "none") else repeat.value
         delivery_str = format_delivery_time(d, mo, y, h, m, user_tz)
-        rel_str = get_relative_time_str(d, mo, y, h, m)
+        rel_str = get_relative_time_str(d, mo, y, h, m, user_tz)
 
         preview = discord.Embed(title=f"📁 Confirm template: `{name}`", description=tpl["message_content"][:1024], color=discord.Color.gold())
         preview.add_field(name="⏰ Delivery", value=f"{delivery_str}\n`{rel_str}`", inline=True)

@@ -282,7 +282,7 @@ def format_delivery_time(day: Optional[int], month: Optional[int], year: Optiona
 
 
 def build_delivery_datetime(
-    day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int
+    day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int, tzinfo: Optional[ZoneInfo]
 ) -> datetime:
     """
     Build a datetime object from message delivery fields
@@ -294,7 +294,7 @@ def build_delivery_datetime(
     Returns:
         datetime object
     """
-    now = datetime.now()
+    now = datetime.now(tzinfo)
 
     if day is None:
         day = now.day
@@ -304,13 +304,13 @@ def build_delivery_datetime(
         year = now.year
 
     try:
-        return datetime(year, month, day, hour, minute)
+        return datetime(year, month, day, hour, minute, tzinfo=tzinfo)
     except ValueError:
         # If invalid datetime, return current time (shouldn't happen with validation)
         return now
 
 
-def compare_delivery_times(msg1: Dict, msg2: Dict) -> int:
+def compare_delivery_times(msg1: Dict, msg2: Dict, tzinfo: Optional[str]) -> int:
     """
     Compare two messages' delivery times
     Returns -1 if msg1 < msg2, 0 if equal, 1 if msg1 > msg2
@@ -321,6 +321,7 @@ def compare_delivery_times(msg1: Dict, msg2: Dict) -> int:
         msg1.get("delivery_year"),
         msg1["delivery_hour"],
         msg1["delivery_minute"],
+        tzinfo=tzinfo
     )
     dt2 = build_delivery_datetime(
         msg2.get("delivery_day"),
@@ -328,6 +329,7 @@ def compare_delivery_times(msg1: Dict, msg2: Dict) -> int:
         msg2.get("delivery_year"),
         msg2["delivery_hour"],
         msg2["delivery_minute"],
+        tzinfo=tzinfo
     )
 
     if dt1 < dt2:
@@ -355,7 +357,7 @@ def get_queue_position(messages: List[Dict], message_id: str) -> Optional[int]:
     return None
 
 
-def is_delivery_time(message: Dict) -> bool:
+def is_delivery_time(message: Dict, tzinfo: Optional[ZoneInfo]) -> bool:
     """
     Check if a message's delivery time has arrived
 
@@ -371,19 +373,10 @@ def is_delivery_time(message: Dict) -> bool:
         message.get("delivery_year"),
         message["delivery_hour"],
         message["delivery_minute"],
+        tzinfo=tzinfo
     )
 
-    now = datetime.now()
-
-    # Consider message ready for delivery if current time is >= delivery time
-    # and we're within the same minute (to avoid multiple deliveries)
-    return (
-        now.year == delivery_dt.year
-        and now.month == delivery_dt.month
-        and now.day == delivery_dt.day
-        and now.hour == delivery_dt.hour
-        and now.minute == delivery_dt.minute
-    )
+    return datetime.now(tzinfo) >= delivery_dt
 
 
 def validate_timezone(tz_name: str) -> None:
@@ -531,9 +524,9 @@ def parse_time_expression(expr: str, user_tz: str = "UTC") -> Tuple[int, int, Op
     )
 
     if parsed is not None:
-        # Convert to server-local naive datetime (delivery loop uses datetime.now())
-        server_local = parsed.astimezone().replace(tzinfo=None)
-        return server_local.hour, server_local.minute, server_local.day, server_local.month, server_local.year
+        # Convert to UTC — format_delivery_time and is_delivery_time both work in UTC
+        utc_dt = parsed.astimezone(tz)
+        return utc_dt.hour, utc_dt.minute, utc_dt.day, utc_dt.month, utc_dt.year
 
     # Fallback: "DD/MM HH:MM" or "DD/MM/YYYY HH:MM"
     parts = expr.split()
@@ -541,16 +534,20 @@ def parse_time_expression(expr: str, user_tz: str = "UTC") -> Tuple[int, int, Op
         try:
             day, month, year = parse_date_input(parts[0])
             hour, minute = parse_time_input(parts[1])
-            now = datetime.now()
-            return hour, minute, day, month or now.month, year or now.year
+            y = year or now_in_tz.year
+            m = month or now_in_tz.month
+            d = day or now_in_tz.day
+            local_dt = datetime(y, m, d, hour, minute, tzinfo=tz)
+            utc_dt = local_dt.astimezone(ZoneInfo("UTC"))
+            return utc_dt.hour, utc_dt.minute, utc_dt.day, utc_dt.month, utc_dt.year
         except ValidationError:
             pass
 
     # Fallback: bare "HH:MM"
     try:
         hour, minute = parse_time_input(expr)
-        now = datetime.now()
-        return hour, minute, now.day, now.month, now.year
+        local_dt = now_in_tz.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return local_dt.hour, local_dt.minute, local_dt.day, local_dt.month, local_dt.year
     except ValidationError:
         pass
 
@@ -559,11 +556,12 @@ def parse_time_expression(expr: str, user_tz: str = "UTC") -> Tuple[int, int, Op
     )
 
 
-def get_relative_time_str(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int) -> str:
+def get_relative_time_str(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int, tzinfo: Optional[ZoneInfo]) -> str:
     """Return a short relative-time label: 'overdue', 'in 4h 20m', 'in 2d', etc."""
-    delivery_dt = build_delivery_datetime(day, month, year, hour, minute)
-    delta = delivery_dt - datetime.now()
+    delivery_dt = build_delivery_datetime(day, month, year, hour, minute, tzinfo=tzinfo)
+    delta = delivery_dt - datetime.now(tzinfo)
     total_secs = delta.total_seconds()
+    print(f"Delivery time: {delivery_dt}\nnow: {datetime.now(tzinfo)}\ndelta: {delta}\ntotal_secs: {total_secs}")
 
     if total_secs < 0:
         return "overdue"
@@ -582,10 +580,10 @@ def get_relative_time_str(day: Optional[int], month: Optional[int], year: Option
     return f"in {days // 7}w"
 
 
-def get_urgency_color(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int) -> discord.Color:
+def get_urgency_color(day: Optional[int], month: Optional[int], year: Optional[int], hour: int, minute: int, tzinfo: Optional[ZoneInfo]) -> discord.Color:
     """Red for <1h or overdue, orange for <24h, green otherwise."""
-    delivery_dt = build_delivery_datetime(day, month, year, hour, minute)
-    secs = (delivery_dt - datetime.now()).total_seconds()
+    delivery_dt = build_delivery_datetime(day, month, year, hour, minute, tzinfo=tzinfo)
+    secs = (delivery_dt - datetime.now(tzinfo)).total_seconds()
     if secs < 3600:
         return discord.Color.red()
     if secs < 86400:
@@ -593,7 +591,7 @@ def get_urgency_color(day: Optional[int], month: Optional[int], year: Optional[i
     return discord.Color.green()
 
 
-def compute_next_recurrence(message: Dict) -> Optional[Tuple[int, int, Optional[int], Optional[int], Optional[int]]]:
+def compute_next_recurrence(message: Dict, tzinfo: Optional[ZoneInfo]) -> Optional[Tuple[int, int, Optional[int], Optional[int], Optional[int]]]:
     """
     Given a recurring message, return (hour, minute, day, month, year) for its
     next delivery, or None if the message is not recurring.
@@ -608,6 +606,7 @@ def compute_next_recurrence(message: Dict) -> Optional[Tuple[int, int, Optional[
         message.get("delivery_year"),
         message["delivery_hour"],
         message["delivery_minute"],
+        tzinfo=tzinfo
     )
 
     if interval == "daily":
