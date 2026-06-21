@@ -5,10 +5,16 @@ FROM python:3.14-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-cache build-base libffi-dev openssl-dev
+RUN apk add --no-cache build-base libffi-dev openssl-dev openssl nodejs npm
 
 # Install uv
 RUN pip install --no-cache-dir uv
+
+# Set env BEFORE sync and generate
+ENV PYTHONPATH=/app \
+    PATH=/app/.venv/bin:$PATH \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/app/.venv
 
 # Copy project files
 COPY pyproject.toml uv.lock ./
@@ -17,8 +23,7 @@ COPY prisma ./prisma
 # Sync dependencies (--no-install-project since source isn't present in builder)
 RUN uv sync --frozen --no-dev --no-editable --no-install-project --no-cache
 
-# Generate client from prisma schema
-RUN /app/.venv/bin/prisma generate --schema=/app/prisma/schema.prisma
+RUN prisma generate --schema=/app/prisma/schema.prisma
 
 # Stage 2: Runtime stage
 FROM python:3.12-alpine
@@ -53,12 +58,6 @@ RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app
 
 # Change to non-root user
 USER scheduler
-
-# Ensure Python can find the app and uses the virtual environment
-ENV PYTHONPATH=/app:$PYTHONPATH \
-    PATH=/app/.venv/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    VIRTUAL_ENV=/app/.venv
 
 # Health check - verify bot process is actually running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
