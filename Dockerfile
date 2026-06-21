@@ -16,9 +16,7 @@ RUN pip install --no-cache-dir uv
 # Set env so venv is active for all subsequent RUN steps
 ENV PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    VIRTUAL_ENV=/app/.venv \
-    XDG_CACHE_HOME=/root/.cache
+    VIRTUAL_ENV=/app/.venv
 
 # Copy only dependency files first (better layer caching)
 COPY pyproject.toml uv.lock ./
@@ -33,7 +31,7 @@ RUN prisma generate --schema=/app/prisma/schema.prisma
 # ─────────────────────────────────────────
 # Stage 2: Runtime
 # ─────────────────────────────────────────
-FROM python:3.12-alpine
+FROM python:3.14-alpine
 
 LABEL maintainer="Scheduler Bot"
 LABEL description="Discord Scheduler Bot - Schedule messages for later delivery"
@@ -44,22 +42,14 @@ WORKDIR /app
 RUN addgroup -g 1000 scheduler && adduser -D -u 1000 -G scheduler scheduler
 
 # Install runtime dependencies (no build tools, no node)
-RUN apk add --no-cache \
-    ca-certificates \
-    libffi \
-    openssl \
-    procps
+RUN apk add --no-cache ca-certificates libffi openssl procps
 
 # Copy venv from builder
 COPY --from=builder --chown=scheduler:scheduler /app/.venv /app/.venv
 
-# Copy Prisma cache (contains Node binary + generated client used at runtime)
-COPY --from=builder --chown=scheduler:scheduler /root/.cache/prisma-python /home/scheduler/.cache/prisma-python
-
 # Copy application source and assets
 COPY --chown=scheduler:scheduler src /app/src
 COPY --chown=scheduler:scheduler assets /app/assets
-COPY --chown=scheduler:scheduler prisma /app/prisma
 
 # Setup logs directory
 RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app
@@ -67,9 +57,7 @@ RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app
 # Activate venv and point Prisma cache to the non-root user's home
 ENV PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
-    VIRTUAL_ENV=/app/.venv \
-    XDG_CACHE_HOME=/home/scheduler/.cache
+    VIRTUAL_ENV=/app/.venv
 
 # Change to non-root user
 USER scheduler
