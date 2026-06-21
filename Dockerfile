@@ -11,10 +11,13 @@ RUN apk add --no-cache build-base libffi-dev openssl-dev
 RUN pip install --no-cache-dir uv
 
 # Copy project files
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock prisma ./
 
 # Sync dependencies (--no-install-project since source isn't present in builder)
 RUN uv sync --frozen --no-dev --no-editable --no-install-project --no-cache
+
+# Generate client from prisma schema
+RUN /app/.venv/bin/prisma generate --schema=/app/prisma/schema.prisma
 
 # Stage 2: Runtime stage
 FROM python:3.12-alpine
@@ -42,6 +45,7 @@ COPY --from=builder --chown=scheduler:scheduler /app/.venv /app/.venv
 # Copy application code
 COPY --chown=scheduler:scheduler src /app/src
 COPY --chown=scheduler:scheduler assets /app/assets
+COPY --chown=scheduler:scheduler prisma /app/prisma
 
 # Setup logs directory
 RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app
