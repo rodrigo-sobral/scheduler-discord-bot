@@ -11,7 +11,8 @@ RUN apk add --no-cache build-base libffi-dev openssl-dev
 RUN pip install --no-cache-dir uv
 
 # Copy project files
-COPY pyproject.toml uv.lock prisma ./
+COPY pyproject.toml uv.lock ./
+COPY prisma ./prisma
 
 # Sync dependencies (--no-install-project since source isn't present in builder)
 RUN uv sync --frozen --no-dev --no-editable --no-install-project --no-cache
