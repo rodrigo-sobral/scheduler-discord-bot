@@ -17,10 +17,7 @@ RUN addgroup -g 1000 scheduler && adduser -D -u 1000 -G scheduler scheduler
 ENV PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH \
     VIRTUAL_ENV=/app/.venv \
-    PYTHONUNBUFFERED=1 \
-    UV_LINK_MODE=copy \
-    UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=0
+    PRISMA_BINARY_CACHE_DIR=/app/.prisma-cache
 
 COPY pyproject.toml uv.lock README.md ./
 COPY prisma ./prisma
@@ -33,7 +30,7 @@ RUN uv sync --frozen --no-dev --no-editable --no-cache && \
 
 # Setup logs directory and fix ownership (including prisma cache written as root)
 RUN mkdir -p /app/logs && \
-    chown -R scheduler:scheduler /app /root/.cache/prisma-python
+    chown -R scheduler:scheduler /app
 
 USER scheduler
 
