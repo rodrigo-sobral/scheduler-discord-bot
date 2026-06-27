@@ -20,8 +20,7 @@ ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
-    UV_PYTHON_DOWNLOADS=0 \
-    XDG_CACHE_HOME=/home/scheduler/.cache
+    UV_PYTHON_DOWNLOADS=0
 
 COPY pyproject.toml uv.lock README.md ./
 COPY prisma ./prisma
@@ -32,8 +31,9 @@ COPY assets ./assets
 RUN uv sync --frozen --no-dev --no-editable --no-cache && \
     prisma generate --schema=/app/prisma/schema.prisma
 
-# Setup logs directory and fix ownership
-RUN mkdir -p /app/logs && chown -R scheduler:scheduler /app /home/scheduler/.cache
+# Setup logs directory and fix ownership (including prisma cache written as root)
+RUN mkdir -p /app/logs && \
+    chown -R scheduler:scheduler /app /root/.cache/prisma-python
 
 USER scheduler
 
