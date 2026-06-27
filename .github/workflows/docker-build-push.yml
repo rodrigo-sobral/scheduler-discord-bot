@@ -150,6 +150,7 @@ jobs:
           persist-credentials: false
 
       - name: Download release notes
+        if: needs.version-bump-and-release.result == 'success'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-notes
@@ -187,6 +188,7 @@ jobs:
           platforms: linux/arm64,linux/amd64
 
       - name: Create Release
+        if: needs.version-bump-and-release.result == 'success'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
