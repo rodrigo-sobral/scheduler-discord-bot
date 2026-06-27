@@ -646,7 +646,7 @@ async def format_destinations_with_names(bot, destination_ids: list[str], max_na
             # Try to fetch as user first
             user = await bot.fetch_user(int(dest_id))
             names.append(f"@{user.name}")
-        except discord.NotFound, ValueError:
+        except (discord.NotFound, ValueError):
             try:
                 # Try to fetch as channel
                 channel = bot.get_channel(int(dest_id))
