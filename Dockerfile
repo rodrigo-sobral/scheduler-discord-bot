@@ -18,14 +18,15 @@ ENV PYTHONPATH=/app \
     PATH=/app/.venv/bin:$PATH \
     VIRTUAL_ENV=/app/.venv
 
-# Copy only dependency files first (better layer caching)
-COPY pyproject.toml uv.lock ./
+# Copy source code and dependency files first (better layer caching)
+COPY pyproject.toml uv.lock README.md ./
 COPY prisma ./prisma
+COPY src ./src
 
 # Install dependencies into /app/.venv
-RUN uv sync --frozen --no-dev --no-editable --no-install-project --no-cache
+RUN uv sync --frozen --no-dev --no-editable --no-cache
 
-# Generate Prisma client (writes to .venv AND /root/.cache/prisma-python)
+# Generate Prisma client
 RUN prisma generate --schema=/app/prisma/schema.prisma
 
 # ─────────────────────────────────────────
