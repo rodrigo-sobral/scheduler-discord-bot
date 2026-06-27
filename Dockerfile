@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────
 # Stage 1: Builder
 # ─────────────────────────────────────────
-FROM python:3.14-alpine AS builder
+FROM python:3.12-alpine AS builder
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN prisma generate --schema=/app/prisma/schema.prisma
 # ─────────────────────────────────────────
 # Stage 2: Runtime
 # ─────────────────────────────────────────
-FROM python:3.14-alpine
+FROM python:3.12-alpine
 
 LABEL maintainer="Scheduler Bot"
 LABEL description="Discord Scheduler Bot - Schedule messages for later delivery"
