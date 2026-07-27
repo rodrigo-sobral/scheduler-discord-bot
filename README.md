@@ -81,4 +81,8 @@ A Discord bot that schedules messages to users and channels at specific times wi
 
 ---
 
-**License**: MIT
+## Legal
+
+- [Privacy Policy](docs/PRIVACY.md)
+- [Terms of Use](docs/TERMS.md)
+- [License](LICENSE)
